@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- древко знамени -->
+    <path android:fillColor="#8A5A2A" android:pathData="M40,30h3v50h-3z" />
+    <!-- знамя -->
+    <path android:fillColor="#C0342B" android:pathData="M43,30C52,27 60,34 70,31L70,49C60,52 52,45 43,48Z" />
+    <path android:fillColor="#FFD77A" android:pathData="M53,36l2,4 4,0.5 -3,3 1,4 -4,-2 -4,2 1,-4 -3,-3 4,-0.5z" />
+    <!-- пика -->
+    <path android:fillColor="#D8DCE0" android:pathData="M64,24l4,-6 2,7z" />
+    <path android:fillColor="#6A4A2A" android:pathData="M66.5,24.5l2.5,0.8 -14,58 -2.5,-0.8z" />
+    <!-- земля -->
+    <path android:fillColor="#5A8A3A" android:pathData="M28,78h52v4h-52z" />
+</vector>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Порох и Знамёна</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="top">
+    <div id="res"></div>
+    <div id="topbtns">
+      <button id="bSpeed" class="tb">×1</button>
+      <button id="bPause" class="tb">❚❚</button>
+    </div>
+  </div>
+  <canvas id="mini" width="150" height="150"></canvas>
+  <div id="quick">
+    <button data-q="army">⚔ Армия</button>
+    <button data-q="idle">⛏ Без дела</button>
+    <button data-q="box" id="bBox">▭ Рамка</button>
+  </div>
+  <div id="panel">
+    <div id="info"></div>
+    <div id="acts"></div>
+  </div>
+  <div id="place" class="hidden">
+    <button id="pOk">✓ Строить здесь</button>
+    <button id="pNo">✕ Отмена</button>
+  </div>
+  <div id="toast"></div>
+</div>
+
+<div id="menu" class="screen">
+  <div class="card">
+    <h1>Порох и Знамёна</h1>
+    <div class="sub">Стратегия эпохи пик и мушкетов</div>
+    <div class="row"><span>Противник</span>
+      <div class="seg" data-k="diff">
+        <button data-v="easy">Лёгкий</button><button data-v="normal" class="on">Обычный</button><button data-v="hard">Трудный</button>
+      </div>
+    </div>
+    <div class="row"><span>Карта</span>
+      <div class="seg" data-k="size">
+        <button data-v="64">Малая</button><button data-v="80" class="on">Средняя</button><button data-v="100">Большая</button>
+      </div>
+    </div>
+    <button id="bStart" class="big">Начать битву</button>
+    <button id="bHelp" class="link">Как играть</button>
+    <div id="help" class="hidden">
+      <p><b>Цель:</b> разрушить все здания и войска противника.</p>
+      <p><b>Выбор:</b> тап по своему отряду или зданию. Двойной тап выбирает всех таких же на экране. Чтобы выделить рамкой, задержите палец и ведите (или нажмите «Рамка»).</p>
+      <p><b>Приказы:</b> тап по земле — идти строем, по врагу — атаковать, по лесу, шахте или ферме — добывать (крестьяне). «Натиск» — идти и бить всех по пути.</p>
+      <p><b>Карта:</b> одним пальцем — двигать, двумя — масштаб, тап по мини-карте — перейти.</p>
+      <p><b>Хозяйство:</b> крестьяне рубят лес, ломают камень, моют золото и работают на фермах. Дома дают место для войск, склад сокращает путь с грузом.</p>
+      <p><b>Войска:</b> пикинёры держат конницу, мушкетёры бьют залпом издалека, рейтары быстры, пушки рушат здания и строи.</p>
+    </div>
+  </div>
+</div>
+
+<div id="pausem" class="screen hidden">
+  <div class="card small">
+    <h2>Пауза</h2>
+    <button id="bResume" class="big">Продолжить</button>
+    <button id="bSound" class="mid">Звук: вкл</button>
+    <button id="bQuit" class="mid">Сдаться и выйти в меню</button>
+  </div>
+</div>
+
+<div id="endm" class="screen hidden">
+  <div class="card small">
+    <h2 id="endTitle"></h2>
+    <div id="endStats"></div>
+    <button id="bMenu" class="big">В меню</button>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>

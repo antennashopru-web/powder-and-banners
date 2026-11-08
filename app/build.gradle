@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ru.argeda.powder'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ru.argeda.powder'
+        minSdk 26
+        targetSdk 35
+        versionCode Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
+        versionName '0.1.' + (System.getenv('BUILD_NUMBER') ?: '0')
+    }
+
+    signingConfigs {
+        release {
+            // Ключ лежит в репозитории, чтобы каждая новая сборка ставилась поверх старой.
+            storeFile file('powder.keystore')
+            storePassword 'powder123'
+            keyAlias 'powder'
+            keyPassword 'powder123'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
