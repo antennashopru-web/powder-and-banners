@@ -47,3 +47,10 @@
 - `app/src/main/assets/` — вся игра: `index.html`, `style.css`, `game.js` (HTML5 Canvas, без библиотек).
 - `app/src/main/java/ru/argeda/powder/MainActivity.java` — оболочка WebView во весь экран, кнопка «Назад» ставит игру на паузу.
 - Проверить игру можно и в браузере: откройте `app/src/main/assets/index.html`.
+
+## Авторы графики
+
+3D-модели персонажей, зданий, деревьев и камней — паки **KayKit: Adventurers Character Pack 1.0** и **KayKit: Medieval Hexagon Pack 1.0**
+автора Kay Lousberg (www.kaylousberg.com), лицензия **CC0** (общественное достояние). Персонажи переодеты под XVII век:
+пики, мушкеты, треуголки, кони и пушки смоделированы отдельно (`tools/sprites/models.js`). Спрайты отрендерены из 3D —
+см. `tools/sprites/README.md`.

@@ -1205,7 +1205,7 @@ function getChunk(cx, cy) {
     for (let ty = Math.max(0, y0 - 1); ty < Math.min(G.H, y0 + CH); ty++) for (let tx = Math.max(0, x0 - 2); tx < Math.min(G.W, x0 + CH + 1); tx++) {
       if (G.terrain[idx(tx, ty)] !== T_FOREST) continue;
       const px = (tx - x0) * TILE, py = (ty - y0) * TILE;
-      if (tx >= x0 && tx < x0 + CH && ty >= y0) { g.fillStyle = 'rgba(30,55,20,.28)'; g.beginPath(); g.ellipse(px + 16, py + 18, 20, 16, 0, 0, 7); g.fill(); }
+      if (tx >= x0 && tx < x0 + CH && ty >= y0) { g.fillStyle = 'rgba(30,55,20,.16)'; g.beginPath(); g.ellipse(px + 16, py + 17, 17, 14, 0, 0, 7); g.fill(); }
       const n = hash2(tx, ty, 11) < 0.45 ? 2 : 1;
       for (let k = 0; k < n; k++) {
         const ox = px + (n === 1 ? 10 + hash2(tx, ty, 1) * 12 : 4 + k * 16 + hash2(tx, ty, k * 3 + 1) * 8), oy = py + 14 + k * 9 + hash2(tx, ty, k * 3 + 2) * 8;
@@ -1275,8 +1275,13 @@ function unitFrame(e) {
   return 0;
 }
 function drawUnitSprite(g, type, team, dir, f) {
-  const m = SPR.meta.units[type], sc = m.scale;
-  g.drawImage(SPR.img['u_' + type], f * m.cw * sc, ((team ? 8 : 0) + dir) * m.ch * sc, m.cw * sc, m.ch * sc, -m.ax, -m.ay, m.cw, m.ch);
+  const m = SPR.meta.units[type], sc = m.scale, row = (team ? 8 : 0) + dir;
+  if (m.fr) {
+    const k = (row * m.cols + f) * 4, fx = m.fr[k], fy = m.fr[k + 1], fw = m.fr[k + 2], fh = m.fr[k + 3];
+    g.drawImage(SPR.img['u_' + type], f * m.cw * sc + fx, row * m.ch * sc + fy, fw, fh, -m.ax + fx / sc, -m.ay + fy / sc, fw / sc, fh / sc);
+    return;
+  }
+  g.drawImage(SPR.img['u_' + type], f * m.cw * sc, row * m.ch * sc, m.cw * sc, m.ch * sc, -m.ax, -m.ay, m.cw, m.ch);
 }
 function drawBuildingSprite(g, type, team, x0, y0, prog) {
   const m = SPR.meta.blds[type], d = BLD[type], sc = m.scale, w = d.w * TILE, h = d.h * TILE;
