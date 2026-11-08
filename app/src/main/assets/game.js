@@ -3,7 +3,7 @@
 (function () {
 
 // ============================================================ константы
-const TILE = 32, CH = 16, CPAD = 28;
+const TILE = 32, CH = 16, CPAD = 48;
 const T_GRASS = 0, T_FOREST = 1, T_WATER = 2, T_SAND = 3;
 const TEAM = [
   { main: '#2e62c4', dark: '#1b3a78', light: '#86aef0', name: 'Синие' },
@@ -61,6 +61,7 @@ function vnoise(x, y, s) {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
 function fbm(x, y, s) { return vnoise(x, y, s) * 0.6 + vnoise(x * 2, y * 2, s + 7) * 0.3 + vnoise(x * 4, y * 4, s + 13) * 0.1; }
+const dirOf = (dx, dy) => Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) & 7;
 function costStr(c) { return RES.filter((r) => c[r]).map((r) => RICON[r] + c[r]).join(' '); }
 
 class Heap {
@@ -228,7 +229,7 @@ function carve(a, b) {
 function spawnUnit(type, team, x, y) {
   const d = UNIT[type];
   const u = {
-    id: G.nextId++, kind: 'u', type, team, x, y, hp: d.hp, maxhp: d.hp, r: d.r, face: team ? -1 : 1, anim: Math.random() * 6,
+    id: G.nextId++, kind: 'u', type, team, x, y, hp: d.hp, maxhp: d.hp, r: d.r, face: team ? -1 : 1, dir: team ? 4 : 0, anim: Math.random() * 6,
     cd: 0, goal: null, target: null, cmd: null, task: null, carry: 0, carryType: null, phase: 'go', workT: 0,
     scanT: Math.random() * 0.4, chaseT: 0, moving: false, working: false, aimT: 0, hitT: 0, dead: false, amovePt: null,
   };
@@ -401,6 +402,7 @@ function steer(u, dt) {
   const step = Math.min(UNIT[u.type].spd * dt, L);
   moveBy(u, dx / L * step, dy / L * step);
   if (Math.abs(dx) > 0.5) u.face = dx > 0 ? 1 : -1;
+  if (L > 2) u.dir = dirOf(dx, dy);
   u.moving = true; u.anim += dt;
   return false;
 }
@@ -506,6 +508,7 @@ function doCombat(u, dt) {
   if (dist <= d.range) {
     u.goal = null;
     if (Math.abs(t.x - u.x) > 1) u.face = t.x > u.x ? 1 : -1;
+    u.dir = dirOf(t.x - u.x, t.y - u.y);
     u.aimT = 0.4;
     if (u.cd <= 0) { attack(u, t, dist); u.cd = d.cd * (0.85 + Math.random() * 0.3); }
     return;
@@ -558,7 +561,7 @@ function kill(t, src) {
   if (src && src.team !== t.team && src.team >= 0) G.stats[src.team].killed++;
   if (t.team >= 0) G.stats[t.team].lost++;
   if (t.kind === 'u') {
-    G.decals.push({ k: 'corpse', x: t.x, y: t.y, type: t.type, team: t.team, face: t.face, t: 0, life: 40 });
+    G.decals.push({ k: 'corpse', x: t.x, y: t.y, type: t.type, team: t.team, face: t.face, dir: t.dir || 0, t: 0, life: 40 });
   } else if (t.kind === 'b') {
     for (let j = t.ty; j < t.ty + t.h; j++) for (let i = t.tx; i < t.tx + t.w; i++) G.occ[idx(i, j)] = 0;
     G.fieldVer++; G.miniDirty = true;
@@ -691,6 +694,7 @@ function peasantTask(u, dt) {
     if (distTo(u, b) <= u.r + 8) {
       u.goal = null; u.working = true; u.anim += dt;
       if (Math.abs(b.x - u.x) > 1) u.face = b.x > u.x ? 1 : -1;
+      u.dir = dirOf(b.x - u.x, b.y - u.y);
       const bd = BLD[b.type];
       b.progress += dt; b.hp = Math.min(b.maxhp, b.hp + b.maxhp * 0.9 * dt / bd.time);
       if (b.progress >= bd.time) finishBuilding(b);
@@ -712,6 +716,8 @@ function peasantTask(u, dt) {
     u.goal = null; u.working = true; u.anim += dt;
     const sx = (src.tx + (src.kind === 'tree' ? 0.5 : src.w / 2)) * TILE;
     if (Math.abs(sx - u.x) > 1) u.face = sx > u.x ? 1 : -1;
+    const sy = (src.ty + (src.kind === 'tree' ? 0.5 : src.h / 2)) * TILE;
+    u.dir = dirOf(sx - u.x, sy - u.y);
     u.workT += dt;
     const gt = GTIME[t.res];
     while (u.workT >= gt) {
@@ -1194,7 +1200,22 @@ function getChunk(cx, cy) {
       if (hash2(tx, ty, 99) < 0.04) { g.fillStyle = ['#f0e070', '#f4f4f4', '#d070c0'][(hash2(tx, ty, 98) * 3) | 0]; g.fillRect(px + 10, py + 14, 3, 3); g.fillRect(px + 18, py + 20, 3, 3); }
     }
   }
-  // деревья, сверху вниз
+  // деревья, сверху вниз (с соседями по краям, чтобы кроны и тени не резались на стыках)
+  if (SPR.ok) {
+    for (let ty = Math.max(0, y0 - 1); ty < Math.min(G.H, y0 + CH); ty++) for (let tx = Math.max(0, x0 - 2); tx < Math.min(G.W, x0 + CH + 1); tx++) {
+      if (G.terrain[idx(tx, ty)] !== T_FOREST) continue;
+      const px = (tx - x0) * TILE, py = (ty - y0) * TILE;
+      if (tx >= x0 && tx < x0 + CH && ty >= y0) { g.fillStyle = 'rgba(30,55,20,.28)'; g.beginPath(); g.ellipse(px + 16, py + 18, 20, 16, 0, 0, 7); g.fill(); }
+      const n = hash2(tx, ty, 11) < 0.45 ? 2 : 1;
+      for (let k = 0; k < n; k++) {
+        const ox = px + (n === 1 ? 10 + hash2(tx, ty, 1) * 12 : 4 + k * 16 + hash2(tx, ty, k * 3 + 1) * 8), oy = py + 14 + k * 9 + hash2(tx, ty, k * 3 + 2) * 8;
+        const conifer = fbm(tx / 9, ty / 9, G.seed + 31) < 0.5;
+        drawTreeSprite(g, ox, oy, (conifer ? 0 : 4) + ((hash2(tx, ty, k * 3 + 3) * 4) | 0));
+      }
+    }
+    G.chunks.set(key, c);
+    return c;
+  }
   for (let ty = y0; ty < Math.min(G.H, y0 + CH); ty++) for (let tx = x0; tx < Math.min(G.W, x0 + CH); tx++) {
     if (G.terrain[idx(tx, ty)] !== T_FOREST) continue;
     const px = (tx - x0) * TILE, py = (ty - y0) * TILE;
@@ -1228,6 +1249,60 @@ function drawTree(g, x, y, h) {
     g.fillStyle = '#3f7a32'; g.beginPath(); g.arc(x + 5 * s, y - 18 * s, 5 * s, 0, 7); g.fill();
     g.fillStyle = 'rgba(200,240,150,.35)'; g.beginPath(); g.arc(x - 5 * s, y - 23 * s, 1.6 * s, 0, 7); g.fill();
   }
+}
+
+// ============================================================ пререндеренные 3D-спрайты
+const SPR = { ok: false, img: {}, meta: null };
+function loadSprites() {
+  const D = window.SPR_DATA; if (!D) return;
+  SPR.meta = D.meta;
+  const keys = Object.keys(D.img); let n = 0;
+  for (const k of keys) {
+    const im = new Image();
+    im.onload = () => { if (++n === keys.length) { SPR.ok = true; if (G) G.chunks.clear(); makeIcons(); uiDirty = true; uiSig = ''; } };
+    im.src = D.img[k]; SPR.img[k] = im;
+  }
+}
+// кадры атласа: 0 стоит, 1-4 шаг, 5-7 действие, 8 убит
+function unitFrame(e) {
+  if (e.working) { const k = Math.floor(e.anim * 5) % 4; return 5 + (k === 3 ? 1 : k); }
+  if (e.aimT > 0) {
+    if (e.hitT > 0) return e.hitT > 0.17 ? 5 : e.hitT > 0.08 ? 6 : 7;
+    if (e.type === 'musket' || e.type === 'cannon') return UNIT[e.type].cd - e.cd < 0.25 ? 6 : 5;
+    return 5;
+  }
+  if (e.moving) return 1 + (Math.floor(e.anim * (e.type === 'cav' ? 9 : 7)) & 3);
+  return 0;
+}
+function drawUnitSprite(g, type, team, dir, f) {
+  const m = SPR.meta.units[type], sc = m.scale;
+  g.drawImage(SPR.img['u_' + type], f * m.cw * sc, ((team ? 8 : 0) + dir) * m.ch * sc, m.cw * sc, m.ch * sc, -m.ax, -m.ay, m.cw, m.ch);
+}
+function drawBuildingSprite(g, type, team, x0, y0, prog) {
+  const m = SPR.meta.blds[type], d = BLD[type], sc = m.scale, w = d.w * TILE, h = d.h * TILE;
+  const cx = x0 + w / 2, cy = y0 + h / 2;
+  if (prog < 1) {
+    g.fillStyle = 'rgba(138,106,68,.75)'; g.fillRect(x0 + 2, y0 + 2, w - 4, h - 4);
+    // здание «растёт» снизу вверх
+    const top = cy - m.ay, full = m.ch, vis = Math.max(2, full * (0.15 + 0.85 * prog));
+    g.globalAlpha *= 0.9;
+    g.drawImage(SPR.img['b_' + type], (team ? m.cw : 0) * sc, (full - vis) * sc, m.cw * sc, vis * sc, cx - m.ax, top + full - vis, m.cw, vis);
+    g.globalAlpha /= 0.9;
+    g.strokeStyle = '#6a4a28'; g.lineWidth = 2;
+    for (let k = 0; k <= d.w * 2; k++) { g.beginPath(); g.moveTo(x0 + 3 + k * (w - 6) / (d.w * 2), y0 + h); g.lineTo(x0 + 3 + k * (w - 6) / (d.w * 2), y0 + 6 - 20 * prog); g.stroke(); }
+    for (let yy = y0 + h - 4; yy > y0 + 6 - 20 * prog; yy -= 14) { g.beginPath(); g.moveTo(x0 + 3, yy); g.lineTo(x0 + w - 3, yy); g.stroke(); }
+    return;
+  }
+  g.drawImage(SPR.img['b_' + type], (team ? m.cw : 0) * sc, 0, m.cw * sc, m.ch * sc, cx - m.ax, cy - m.ay, m.cw, m.ch);
+}
+function drawTreeSprite(g, x, y, k) {
+  const m = SPR.meta.trees, sc = m.scale;
+  g.drawImage(SPR.img.trees, k * m.cw * sc, 0, m.cw * sc, m.ch * sc, x - m.ax, y - m.ay, m.cw, m.ch);
+}
+function drawMineSprite(g, mn) {
+  const m = SPR.meta.rocks, sc = m.scale, cx = mn.tx * TILE + 32, cy = mn.ty * TILE + 32;
+  const s = 0.6 + 0.4 * Math.sqrt(clamp(mn.amount / mn.max, 0, 1));
+  g.drawImage(SPR.img.rocks, (mn.res === 'gold' ? 0 : m.cw) * sc, 0, m.cw * sc, m.ch * sc, cx - m.ax * s, cy - m.ay * s, m.cw * s, m.ch * s);
 }
 
 // ============================================================ отрисовка: объекты
@@ -1473,7 +1548,8 @@ function render(now) {
     if (d.x < v[0] - 100 || d.x > v[2] + 100 || d.y < v[1] - 100 || d.y > v[3] + 100) continue;
     const a = Math.min(1, (d.life - d.t) / 5);
     ctx.globalAlpha = a;
-    if (d.k === 'corpse') { ctx.save(); ctx.translate(d.x, d.y); ctx.rotate((d.face > 0 ? -1.4 : 1.4) * Math.min(1, d.t / 0.35)); ctx.globalAlpha = a * 0.8; drawUnitShape(ctx, d.type, d.team, d.face, 0, false, false, null, 0, 0); ctx.restore(); }
+    if (d.k === 'corpse' && SPR.ok) { ctx.save(); ctx.translate(d.x, d.y); if (d.t < 0.3) { drawUnitSprite(ctx, d.type, d.team, d.dir, 0); } else { ctx.globalAlpha = a * 0.9; drawUnitSprite(ctx, d.type, d.team, d.dir, 8); } ctx.restore(); }
+    else if (d.k === 'corpse') { ctx.save(); ctx.translate(d.x, d.y); ctx.rotate((d.face > 0 ? -1.4 : 1.4) * Math.min(1, d.t / 0.35)); ctx.globalAlpha = a * 0.8; drawUnitShape(ctx, d.type, d.team, d.face, 0, false, false, null, 0, 0); ctx.restore(); }
     else if (d.k === 'ruin') { ctx.fillStyle = '#4a3a2a'; ctx.fillRect(d.x + 4, d.y + d.h * 0.3, d.w - 8, d.h * 0.66); ctx.fillStyle = '#2a2018'; for (let k = 0; k < 8; k++) ctx.fillRect(d.x + 6 + hash2(k, d.x, 1) * (d.w - 18), d.y + d.h * 0.35 + hash2(k, d.y, 2) * d.h * 0.5, 10, 6); }
     else if (d.k === 'crater') { ctx.fillStyle = 'rgba(40,30,20,.45)'; ctx.beginPath(); ctx.ellipse(d.x, d.y, 9, 5, 0, 0, 7); ctx.fill(); }
     else if (d.k === 'stump') { ctx.globalAlpha = 1; ctx.fillStyle = '#6a4a2a'; ctx.beginPath(); ctx.ellipse(d.x, d.y, 3.5, 2, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#c8a070'; ctx.beginPath(); ctx.ellipse(d.x, d.y - 1, 2.5, 1.3, 0, 0, 7); ctx.fill(); }
@@ -1486,7 +1562,7 @@ function render(now) {
     if (!seen(b) || b.x < v[0] - 160 || b.x > v[2] + 160 || b.y < v[1] - 160 || b.y > v[3] + 160) continue;
     const x0 = b.tx * TILE, y0 = b.ty * TILE, w = b.w * TILE, h = b.h * TILE;
     ctx.fillStyle = 'rgba(120,92,58,.38)'; ctx.beginPath(); ctx.ellipse(x0 + w / 2, y0 + h * 0.62, w * 0.66, h * 0.5, 0, 0, 7); ctx.fill();
-    if (b.type !== 'farm') {
+    if (b.type !== 'farm' && !SPR.ok) {
       const sh = b.type === 'tower' ? 34 : b.type === 'hall' ? 30 : 22;
       ctx.fillStyle = 'rgba(10,20,10,.26)'; ctx.beginPath();
       ctx.moveTo(x0 + 4, y0 + h); ctx.lineTo(x0 + 4 + sh, y0 + h + sh * 0.35); ctx.lineTo(x0 + w + sh, y0 + h + sh * 0.35);
@@ -1502,16 +1578,20 @@ function render(now) {
   list.sort((a, b) => a[0] - b[0]);
   const selSet = new Set(G.sel);
   for (const [, e] of list) {
-    if (e.kind === 'm') { drawMine(ctx, e); if (selSet.has(e)) { ctx.strokeStyle = '#ffe080'; ctx.lineWidth = 1.5; ctx.strokeRect(e.tx * TILE, e.ty * TILE, 64, 64); } continue; }
+    if (e.kind === 'm') { if (SPR.ok) drawMineSprite(ctx, e); else drawMine(ctx, e); if (selSet.has(e)) { ctx.strokeStyle = '#ffe080'; ctx.lineWidth = 1.5; ctx.strokeRect(e.tx * TILE, e.ty * TILE, 64, 64); } continue; }
     if (e.kind === 'b') {
       if (selSet.has(e)) { ctx.strokeStyle = e.team === 0 ? '#7cff6a' : '#ff6a5a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(e.x, e.y + e.h * TILE * 0.2, e.w * TILE * 0.62, e.h * TILE * 0.42, 0, 0, 7); ctx.stroke(); }
-      drawBuildingShape(ctx, e.type, e.team, e.tx * TILE, e.ty * TILE, e.built ? 1 : e.progress / BLD[e.type].time, t);
+      if (SPR.ok) drawBuildingSprite(ctx, e.type, e.team, e.tx * TILE, e.ty * TILE, e.built ? 1 : e.progress / BLD[e.type].time);
+      else drawBuildingShape(ctx, e.type, e.team, e.tx * TILE, e.ty * TILE, e.built ? 1 : e.progress / BLD[e.type].time, t);
       if (e.built && e.hp < e.maxhp * 0.55) drawFire(e, t);
       continue;
     }
     if (selSet.has(e)) { const sc = e.team === 0 ? '124,255,106' : '255,106,90'; ctx.fillStyle = `rgba(${sc},.18)`; ctx.strokeStyle = `rgba(${sc},.95)`; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r + 3, (e.r + 3) * 0.45, 0, 0, 7); ctx.fill(); ctx.stroke(); }
     ctx.save(); ctx.translate(e.x, e.y);
-    drawUnitShape(ctx, e.type, e.team, e.face, e.anim, e.moving, e.working, e.carry > 0 ? e.carryType : null, e.aimT, e.hitT);
+    if (SPR.ok) {
+      drawUnitSprite(ctx, e.type, e.team, e.dir, unitFrame(e));
+      if (e.carry > 0 && !e.working) { ctx.fillStyle = { food: '#e0c050', wood: '#8a5a2a', stone: '#9aa0a8', gold: '#ffd84a' }[e.carryType]; ctx.strokeStyle = 'rgba(30,20,10,.7)'; ctx.lineWidth = 0.8; ctx.fillRect(-7, -15, 5, 6); ctx.strokeRect(-7, -15, 5, 6); }
+    } else drawUnitShape(ctx, e.type, e.team, e.face, e.anim, e.moving, e.working, e.carry > 0 ? e.carryType : null, e.aimT, e.hitT);
     ctx.restore();
   }
   // полоски здоровья
@@ -1521,7 +1601,7 @@ function render(now) {
     if (!sel && e.hp >= e.maxhp && (e.kind !== 'b' || e.built)) continue;
     let w, x, y;
     if (e.kind === 'b') { w = e.w * TILE * 0.7; x = e.x - w / 2; y = e.ty * TILE - 12; }
-    else { w = 16; x = e.x - 8; y = e.y - (e.type === 'cav' ? 34 : 26); }
+    else { w = 16; x = e.x - 8; y = e.y - (e.type === 'cav' ? 38 : e.type === 'cannon' ? 24 : 30); }
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x - 1, y - 1, w + 2, 4);
     const f = clamp(e.hp / e.maxhp, 0, 1);
     ctx.fillStyle = f > 0.5 ? '#5c3' : f > 0.25 ? '#ec3' : '#e43'; ctx.fillRect(x, y, w * f, 2);
@@ -1554,7 +1634,7 @@ function render(now) {
   // призрак здания
   if (G.placing) {
     const p = G.placing, d = BLD[p.type];
-    ctx.globalAlpha = 0.6; drawBuildingShape(ctx, p.type, 0, p.tx * TILE, p.ty * TILE, 1, t); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.6; if (SPR.ok) drawBuildingSprite(ctx, p.type, 0, p.tx * TILE, p.ty * TILE, 1); else drawBuildingShape(ctx, p.type, 0, p.tx * TILE, p.ty * TILE, 1, t); ctx.globalAlpha = 1;
     ctx.fillStyle = p.ok ? 'rgba(80,255,80,.22)' : 'rgba(255,60,40,.3)'; ctx.fillRect(p.tx * TILE, p.ty * TILE, d.w * TILE, d.h * TILE);
     ctx.strokeStyle = p.ok ? '#7cff6a' : '#ff5040'; ctx.lineWidth = 2; ctx.strokeRect(p.tx * TILE, p.ty * TILE, d.w * TILE, d.h * TILE);
   }
@@ -1772,6 +1852,25 @@ window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 let uiDirty = true, uiSig = '';
 const icons = {};
 function makeIcons() {
+  if (SPR.ok) {
+    // вписать кадр в иконку по реальным границам непрозрачных пикселей (без тени)
+    const fit = (im, sx, sy, sw, sh) => {
+      const tc = document.createElement('canvas'); tc.width = sw; tc.height = sh;
+      const tg = tc.getContext('2d'); tg.drawImage(im, sx, sy, sw, sh, 0, 0, sw, sh);
+      const px = tg.getImageData(0, 0, sw, sh).data;
+      let x0 = sw, y0 = sh, x1 = 0, y1 = 0;
+      for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) if (px[(y * sw + x) * 4 + 3] > 150) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < x0) { x0 = 0; y0 = 0; x1 = sw - 1; y1 = sh - 1; }
+      const c = document.createElement('canvas'); c.width = c.height = 72;
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1, k = Math.min(66 / bw, 66 / bh);
+      const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+      g.drawImage(tc, x0, y0, bw, bh, 36 - bw * k / 2, 36 - bh * k / 2, bw * k, bh * k);
+      return c.toDataURL();
+    };
+    for (const t in UNIT) { const m = SPR.meta.units[t], sc = m.scale; icons[t] = fit(SPR.img['u_' + t], 0, 1 * m.ch * sc, m.cw * sc, m.ch * sc); }
+    for (const t in BLD) { const m = SPR.meta.blds[t], sc = m.scale; icons[t] = fit(SPR.img['b_' + t], 0, 0, m.cw * sc, m.ch * sc); }
+    return;
+  }
   for (const t in UNIT) {
     const c = document.createElement('canvas'); c.width = c.height = 72;
     const g = c.getContext('2d'); g.translate(34, t === 'pike' ? 66 : 60); g.scale(t === 'pike' ? 1.6 : 2.1, t === 'pike' ? 1.6 : 2.1);
@@ -1875,10 +1974,10 @@ actsEl.addEventListener('click', (e) => {
     const us = ownSelUnits(); if (us.length) {
       let cx = 0, cy = 0; for (const u of us) { cx += u.x; cy += u.y; } cx /= us.length; cy /= us.length;
       const lead = us.find((u) => u.goal) || us[0];
-      const fx = lead.face || 1;
+      const fx = lead.face || 1, fd = lead.dir || 0;
       groupMove(us, cx, cy, 'move');
       // повернуть строй лицом по направлению взгляда
-      for (const u of us) u.face = fx;
+      for (const u of us) { u.face = fx; u.dir = fd; }
     }
   }
   uiDirty = true;
@@ -2023,6 +2122,7 @@ function frame(now) {
 // ============================================================ старт
 resize();
 makeIcons();
+loadSprites();
 const params = new URLSearchParams(location.search);
 if (params.has('auto')) {
   // самопроверка: два ИИ играют друг с другом без отрисовки
