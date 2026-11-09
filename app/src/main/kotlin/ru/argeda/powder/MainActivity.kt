@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.text.Html
 import android.text.TextUtils
 import android.util.TypedValue
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -41,7 +42,7 @@ private const val BORDER = 0xffb08a50.toInt()
 private const val DARK = 0xff3d2a17.toInt()
 
 /** Вся игра — нативное Android-приложение на Kotlin: поле боя на Canvas, интерфейс из обычных View. */
-class MainActivity : Activity(), Host, FrameListener {
+class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private lateinit var root: FrameLayout
     private var spr: Sprites? = null
     private var sfx: Sfx? = null
@@ -127,7 +128,7 @@ class MainActivity : Activity(), Host, FrameListener {
     private fun onLoaded(s: Sprites, a: Sfx?) {
         if (isFinishing) return
         spr = s; sfx = a
-        val v = GameView(this, s, this)
+        val v = GameView(this, s)
         gv = v
         root.addView(v, 0, lp(MP, MP))
         buildHud(s)
@@ -191,6 +192,7 @@ class MainActivity : Activity(), Host, FrameListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        Choreographer.getInstance().removeFrameCallback(this)
         sfx?.release()
     }
 
@@ -402,6 +404,7 @@ class MainActivity : Activity(), Host, FrameListener {
         panel.setPadding(dp(6), dp(6), dp(6), dp(6))
         info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         panel.addView(info, LinearLayout.LayoutParams(dp(190), MP))
+        buildInfo()
         val sc = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER }
         acts = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         sc.addView(acts, ViewGroup.LayoutParams(WC, MP))
@@ -439,7 +442,7 @@ class MainActivity : Activity(), Host, FrameListener {
     }
 
     // полоска (здоровье, прогресс)
-    private inner class Bar(ctx: Context, var frac: Float, val bg: Int, val fg: Int) : View(ctx) {
+    private class Bar(ctx: Context, var frac: Float, val bg: Int, val fg: Int) : View(ctx) {
         private val p = Paint(Paint.ANTI_ALIAS_FLAG)
         override fun onDraw(c: Canvas) {
             val r = height / 2f
@@ -448,10 +451,42 @@ class MainActivity : Activity(), Host, FrameListener {
         }
     }
 
-    private fun infoLine(t: CharSequence) = info.addView(tv(t, 12.5f).apply { setLineSpacing(0f, 1.15f) })
-    private fun infoName(t: String) = info.addView(tv(t, 14f, 0xffffe2a0.toInt(), true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
-    private fun infoBar(f: Double, fg: Int = 0xff55cc33.toInt()) =
-        info.addView(Bar(this, f.toFloat(), 0xff551111.toInt(), fg), LinearLayout.LayoutParams(MP, dp(6)).apply { topMargin = dp(3); bottomMargin = dp(3) })
+    private lateinit var iName: TextView
+    private lateinit var iBar1: Bar
+    private lateinit var iL1: TextView
+    private lateinit var iBar2: Bar
+    private lateinit var iL2: TextView
+    private lateinit var iL3: TextView
+
+    private fun buildInfo() {
+        iName = tv("", 14f, 0xffffe2a0.toInt(), true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        iBar1 = Bar(this, 1f, 0xff551111.toInt(), 0xff55cc33.toInt())
+        iBar2 = Bar(this, 0f, 0xff551111.toInt(), 0xffe8b84a.toInt())
+        fun line() = tv("", 12.5f).apply { setLineSpacing(0f, 1.15f) }
+        iL1 = line(); iL2 = line(); iL3 = line()
+        info.addView(iName)
+        info.addView(iBar1, LinearLayout.LayoutParams(MP, dp(6)).apply { topMargin = dp(3); bottomMargin = dp(3) })
+        info.addView(iL1)
+        info.addView(iBar2, LinearLayout.LayoutParams(MP, dp(6)).apply { topMargin = dp(3); bottomMargin = dp(3) })
+        info.addView(iL2)
+        info.addView(iL3)
+    }
+
+    /** name, полоска здоровья (или <0), строка, полоска очереди (или <0), ещё две строки */
+    private fun setInfo(name: String, hp: Double, l1: CharSequence?, q: Double, l2: CharSequence? = null, l3: CharSequence? = null) {
+        if (iName.text.toString() != name) iName.text = name
+        fun bar(b: Bar, f: Double) {
+            val vis = if (f >= 0) View.VISIBLE else View.GONE
+            if (b.visibility != vis) b.visibility = vis
+            if (f >= 0 && b.frac != f.toFloat()) { b.frac = f.toFloat(); b.invalidate() }
+        }
+        fun line(t: TextView, s: CharSequence?) {
+            val vis = if (s != null) View.VISIBLE else View.GONE
+            if (t.visibility != vis) t.visibility = vis
+            if (s != null && t.text.toString() != s.toString()) t.text = s
+        }
+        bar(iBar1, hp); line(iL1, l1); bar(iBar2, q); line(iL2, l2); line(iL3, l3)
+    }
 
     private fun updatePanel(g: Game) {
         val sel = g.sel
@@ -466,12 +501,11 @@ class MainActivity : Activity(), Host, FrameListener {
         sb.append('|'); for (r in 0..3) sb.append(floor(g.res[0][r] / 10).toInt()).append(',')
         val sig = sb.toString()
 
-        info.removeAllViews()
         val pl = g.placing
         if (pl != null) {
-            infoName(BLD[pl.type].name); infoLine(BLD[pl.type].desc); infoLine("Нажмите на карту, чтобы выбрать место")
+            setInfo(BLD[pl.type].name, -1.0, BLD[pl.type].desc, -1.0, "Нажмите на карту, чтобы выбрать место")
         } else if (sel.isEmpty()) {
-            infoName("Ничего не выбрано"); infoLine("Тап по своему отряду или зданию. Удерживайте палец, чтобы выделить рамкой.")
+            setInfo("Ничего не выбрано", -1.0, "Тап по своему отряду или зданию. Удерживайте палец, чтобы выделить рамкой.", -1.0)
         } else if (sel.size == 1) {
             val e = sel[0]
             if (e is Unt) {
@@ -480,29 +514,21 @@ class MainActivity : Activity(), Host, FrameListener {
                 val st = if (t != null && t.type == TASK_BUILD) "Строит"
                 else if (t != null) "Добывает: " + RNAME[t.res].lowercase() + (if (e.carry > 0) " (${e.carry})" else "")
                 else if (e.target != null) "В бою" else if (e.goal != null) "В пути" else "Ожидает"
-                infoName(d.name + if (e.team != 0) " (враг)" else "")
-                infoBar(e.hp / e.maxhp)
-                infoLine("${ceil(e.hp).toInt()}/${e.maxhp.toInt()} · атака ${d.atk.toInt()}")
-                infoLine(if (e.team != 0) d.desc else st)
+                setInfo(d.name + if (e.team != 0) " (враг)" else "", e.hp / e.maxhp, "${ceil(e.hp).toInt()}/${e.maxhp.toInt()} · атака ${d.atk.toInt()}", -1.0, if (e.team != 0) d.desc else st)
             } else if (e is Bld) {
                 val d = BLD[e.type]
-                infoName(d.name + if (e.team != 0) " (враг)" else "")
-                infoBar(e.hp / e.maxhp)
-                infoLine("${ceil(e.hp).toInt()}/${e.maxhp.toInt()}")
-                if (!e.built) infoLine("Строится: ${floor(e.progress / d.time * 100).toInt()}%")
-                else if (e.queue.isNotEmpty()) {
-                    infoBar(e.qt / UNIT[e.queue[0]].time, 0xffe8b84a.toInt())
-                    infoLine(if (e.popBlocked) "Нужны дома!" else "Обучение: " + UNIT[e.queue[0]].name)
-                } else infoLine(d.desc)
+                val nm = d.name + if (e.team != 0) " (враг)" else ""
+                val hpT = "${ceil(e.hp).toInt()}/${e.maxhp.toInt()}"
+                if (!e.built) setInfo(nm, e.hp / e.maxhp, hpT, -1.0, "Строится: ${floor(e.progress / d.time * 100).toInt()}%")
+                else if (e.queue.isNotEmpty()) setInfo(nm, e.hp / e.maxhp, hpT, e.qt / UNIT[e.queue[0]].time, if (e.popBlocked) "Нужны дома!" else "Обучение: " + UNIT[e.queue[0]].name)
+                else setInfo(nm, e.hp / e.maxhp, hpT, -1.0, d.desc)
             } else if (e is Mine) {
-                infoName(if (e.res == GOLD) "Золотая жила" else "Каменоломня"); infoLine("Осталось: ${e.amount}"); infoLine("Отправьте сюда крестьян")
+                setInfo(if (e.res == GOLD) "Золотая жила" else "Каменоломня", -1.0, "Осталось: ${e.amount}", -1.0, "Отправьте сюда крестьян")
             }
         } else {
-            infoName("Отряд: ${sel.size}")
             val cnt = LinkedHashMap<Int, Int>()
             for (e in sel) if (e is Unt) cnt[e.type] = (cnt[e.type] ?: 0) + 1
-            infoLine(cnt.entries.joinToString("   ") { UNIT[it.key].name + " ×" + it.value })
-            if (g.amove) infoLine("Натиск: тап по карте")
+            setInfo("Отряд: ${sel.size}", -1.0, cnt.entries.joinToString("   ") { UNIT[it.key].name + " ×" + it.value }, -1.0, if (g.amove) "Натиск: тап по карте" else null)
         }
 
         if (sig == uiSig && !g.uiDirty) {
@@ -623,6 +649,7 @@ class MainActivity : Activity(), Host, FrameListener {
         hud.visibility = View.VISIBLE
         uiSig = ""; uiT = 0.0; miniT = 0.0
         syncHudButtons(g)
+        startLoop()
         hud.postDelayed({ if (G === g) toast("Выделите крестьян и постройте ферму и дома") }, 800)
     }
 
@@ -638,7 +665,24 @@ class MainActivity : Activity(), Host, FrameListener {
         pauseM.visibility = View.GONE; endM.visibility = View.GONE; hud.visibility = View.GONE; menu.visibility = View.VISIBLE
     }
 
-    override fun onFrame(dtReal: Double) {
+    private var looping = false
+
+    private fun startLoop() {
+        if (looping) return
+        looping = true
+        gv?.step()
+        Choreographer.getInstance().postFrameCallback(this)
+    }
+
+    override fun doFrame(frameTimeNanos: Long) {
+        val v = gv
+        if (v?.game == null || isDestroyed) { looping = false; return }
+        onFrame(v.step())
+        v.invalidate()
+        Choreographer.getInstance().postFrameCallback(this)
+    }
+
+    private fun onFrame(dtReal: Double) {
         val g = G ?: return
         uiT -= dtReal
         if (uiT <= 0 || g.uiDirty) { uiT = 0.25; updateTop(g); updatePanel(g); syncHudButtons(g) }

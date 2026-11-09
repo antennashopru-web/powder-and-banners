@@ -25,13 +25,9 @@ import kotlin.math.sin
 
 fun rgba(r: Int, g: Int, b: Int, a: Double): Int = Color.argb((clamp(a, 0.0, 1.0) * 255).toInt(), r, g, b)
 
-interface FrameListener {
-    fun onFrame(dtReal: Double)
-}
-
 /** Поле боя: шаг логики, отрисовка мира на Canvas и жесты пальцами. */
 @SuppressLint("ViewConstructor")
-class GameView(ctx: Context, val spr: Sprites, val listener: FrameListener) : View(ctx) {
+class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     var game: Game? = null
         set(v) {
             field = v; chunks.clear(); clouds = null; fogBmp = null; fogVer = -1; gest = null; acc = 0.0
@@ -63,24 +59,27 @@ class GameView(ctx: Context, val spr: Sprites, val listener: FrameListener) : Vi
         game?.let { it.vw = vwDp; it.vh = vhDp; it.clampCam() }
     }
 
-    override fun onDraw(c: Canvas) {
+    /** шаг логики; вызывается из Choreographer, возвращает реальное время кадра */
+    fun step(): Double {
         val now = System.nanoTime()
         val dtReal = min(0.1, (now - lastT) / 1e9)
         lastT = now
-        val G = game
-        if (G != null && !G.paused && !G.over) {
+        val G = game ?: return dtReal
+        if (!G.paused && !G.over) {
             acc += dtReal * G.speed
             var n = 0
             while (acc >= STEP && n < 12) { G.update(STEP); acc -= STEP; n++ }
             if (n >= 12) acc = 0.0
-        } else if (G != null && G.over) {
+        } else if (G.over) {
             acc += dtReal
             while (acc >= STEP) { for (f in G.fx) f.t += STEP; G.fx.removeAll { it.t >= it.life }; acc -= STEP }
         }
+        return dtReal
+    }
+
+    override fun onDraw(c: Canvas) {
         c.drawColor(0xff0b0805.toInt())
-        if (G != null) render(c, G)
-        listener.onFrame(dtReal)
-        if (G != null) postInvalidateOnAnimation()
+        game?.let { render(c, it) }
     }
 
     // ------------------------------------------------------------ местность
