@@ -89,3 +89,13 @@ jobs:
         with:
           name: screens
           path: shots
+
+      - name: Сохранить снимки в ветку ci-screens
+        if: always()
+        run: |
+          cd shots
+          git init -q
+          git checkout -q -b ci-screens
+          git add -A
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "Снимки сборки ${{ github.run_number }}"
+          git push -qf https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git ci-screens
