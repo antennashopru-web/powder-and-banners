@@ -30,7 +30,7 @@ fun rgba(r: Int, g: Int, b: Int, a: Double): Int = Color.argb((clamp(a, 0.0, 1.0
 class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     var game: Game? = null
         set(v) {
-            field = v; chunks.clear(); clouds = null; fogBmp = null; fogVer = -1; gest = null; acc = 0.0
+            field = v; clouds = null; fogBmp = null; fogVer = -1; gest = null; acc = 0.0
             lastT = System.nanoTime()
             if (v != null) { v.vw = vwDp; v.vh = vhDp; v.clampCam() }
             invalidate()
@@ -47,6 +47,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     private val pNoFilter = Paint()
     private val rf = RectF()
     private val path = Path()
+    private val lowSrc = Rect()
     private val dash = DashPathEffect(floatArrayOf(4f, 4f), 0f)
 
     // ------------------------------------------------------------ цикл
@@ -83,103 +84,118 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     }
 
     // ------------------------------------------------------------ местность
-    private val chunks = object : LinkedHashMap<Int, Bitmap>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Bitmap>?) = size > 42
+    // Куски местности рисуются в фоне (попиксельная земля + деревья) в 1× или 2× разрешении
+    // и хранятся в видеопамяти. Пока новый кусок готовится, виден старый или грубая подложка.
+    private class Chunk(val bmp: Bitmap, val ver: Int)
+
+    private val chunks = object : LinkedHashMap<Int, Chunk>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Chunk>?) = size > 34
     }
+    private val cellVer = HashMap<Int, Int>()
+    private val pending = HashSet<Int>()
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "terrain").apply { priority = Thread.NORM_PRIORITY - 1 } }
+    private var genGame: Game? = null
 
     fun chunksDirty(tx: Int, ty: Int, w: Int, h: Int) {
-        for (cy in floorDiv(ty - 1, CH)..floorDiv(ty + h, CH)) for (cx in floorDiv(tx - 1, CH)..floorDiv(tx + w, CH)) chunks.remove(ck(cx, cy))
-        // деревья соседнего снизу чанка заходят вверх
-        chunks.remove(ck(floorDiv(tx, CH), floorDiv(ty + h, CH) + 1))
+        fun bump(cx: Int, cy: Int) { val k = ck(cx, cy); cellVer[k] = (cellVer[k] ?: 0) + 1 }
+        for (cy in floorDiv(ty - 1, CH)..floorDiv(ty + h, CH)) for (cx in floorDiv(tx - 1, CH)..floorDiv(tx + w, CH)) bump(cx, cy)
+        // деревья соседнего снизу куска заходят вверх
+        bump(floorDiv(tx, CH), floorDiv(ty + h, CH) + 1)
     }
 
     private fun floorDiv(a: Int, b: Int) = Math.floorDiv(a, b)
     private fun ck(cx: Int, cy: Int) = cx * 1000 + cy
 
-    private fun grassCol(G: Game, x: Int, y: Int): Int {
-        val g = fbm(x / 7.0, y / 7.0, G.seed + 50)
-        val v = hash2(x, y, 3) * 0.015
-        return Color.rgb((96 + g * 30 - v * 60).toInt(), (138 + g * 24 - v * 40).toInt(), (62 + g * 12).toInt())
-    }
-
     private fun oval(g: Canvas, x: Float, y: Float, rx: Float, ry: Float, p: Paint) {
         rf.set(x - rx, y - ry, x + rx, y + ry); g.drawOval(rf, p)
     }
 
-    private fun getChunk(G: Game, cx: Int, cy: Int): Bitmap {
-        val key = ck(cx, cy)
-        chunks[key]?.let { return it }
-        val bmp = Bitmap.createBitmap(CH * TILE + 2, CH * TILE + CPAD + 2, Bitmap.Config.ARGB_8888)
-        val g = Canvas(bmp)
-        g.translate(0f, CPAD.toFloat())
+    /** кусок для отрисовки (возможно устаревший или другого масштаба), заказывает свежий при нужде */
+    private fun chunkFor(G: Game, cx: Int, cy: Int, sc: Int): Bitmap? {
+        if (genGame !== G) { chunks.clear(); cellVer.clear(); pending.clear(); genGame = G }
+        val cell = ck(cx, cy)
+        val ver = cellVer[cell] ?: 0
+        val key = cell * 4 + sc
+        val c = chunks[key]
+        if ((c == null || c.ver != ver) && !pending.contains(key)) {
+            pending.add(key)
+            worker.execute {
+                val bmp = try { buildChunk(G, cx, cy, sc) } catch (e: Throwable) { null }
+                post {
+                    pending.remove(key)
+                    if (bmp != null && genGame === G && (cellVer[cell] ?: 0) == ver) { chunks[key] = Chunk(bmp, ver); invalidate() }
+                }
+            }
+        }
+        if (c != null) return c.bmp
+        return chunks[cell * 4 + (3 - sc)]?.bmp
+    }
+
+    private fun buildChunk(G: Game, cx: Int, cy: Int, sc: Int): Bitmap {
+        val bw = (CH * TILE + 2) * sc
+        val bh = (CH * TILE + CPAD + 2) * sc
         val x0 = cx * CH
         val y0 = cy * CH
+        val px = IntArray(bw * bh)
+        val tw = min(CH + 1, G.W - x0)
+        val th = min(CH + 1, G.H - y0)
+        Ground.paint(G, x0, y0, tw, th, sc, px, bw, 0, CPAD * sc, bw, bh - CPAD * sc)
+        val bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+        bmp.setPixels(px, 0, bw, 0, 0, bw, bh)
+        val g = Canvas(bmp)
+        g.scale(sc.toFloat(), sc.toFloat())
+        g.translate(0f, CPAD.toFloat())
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        val st = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-        val pth = Path()
         val T = TILE.toFloat()
+        // мелкий декор на траве
         for (ty in y0 until min(G.H, y0 + CH + 1)) for (tx in x0 until min(G.W, x0 + CH + 1)) {
             val t = G.terrain[G.idx(tx, ty)].toInt()
-            val px = (tx - x0) * T
-            val py = (ty - y0) * T
-            if (t == T_WATER) {
-                val dpt = fbm(tx / 5.0, ty / 5.0, G.seed + 77)
-                p.color = Color.rgb((46 + dpt * 20).toInt(), (92 + dpt * 30).toInt(), (140 + dpt * 25).toInt())
-                g.drawRect(px, py, px + T, py + T, p)
-                st.color = rgba(200, 230, 255, .25); st.strokeWidth = 1.2f
-                val h = hash2(tx, ty, 5).toFloat()
-                pth.reset(); pth.moveTo(px + 4 + h * 10, py + 10 + h * 12); pth.quadTo(px + 10 + h * 10, py + 6 + h * 12, px + 16 + h * 10, py + 10 + h * 12)
-                g.drawPath(pth, st)
-            } else if (t == T_SAND) {
-                p.color = grassCol(G, tx, ty); g.drawRect(px, py, px + T, py + T, p)
-                p.color = 0xffcdb67e.toInt(); oval(g, px + 16, py + 16, 21f, 21f, p)
-                p.color = rgba(120, 90, 40, .25)
-                for (k in 0 until 4) {
-                    val ax = px + hash2(tx, ty, k).toFloat() * 30
-                    val ay = py + hash2(ty, tx, k).toFloat() * 30
-                    g.drawRect(ax, ay, ax + 2, ay + 2, p)
-                }
-            } else {
-                p.color = grassCol(G, tx, ty); g.drawRect(px, py, px + T, py + T, p)
-                st.color = rgba(40, 80, 20, .35); st.strokeWidth = 1f
-                for (k in 0 until 3) {
-                    val ax = px + hash2(tx, ty, k + 20).toFloat() * 28 + 2
-                    val ay = py + hash2(tx, ty, k + 40).toFloat() * 28 + 4
-                    g.drawLine(ax, ay, ax - 1.5f, ay - 4, st); g.drawLine(ax, ay, ax + 1.5f, ay - 4, st)
-                }
-                fun hh(s: Int) = hash2(tx, ty, s).toFloat()
-                if (hh(71) < 0.06) { p.color = rgba(120, 96, 60, .28); oval(g, px + 8 + hh(72) * 16, py + 8 + hh(73) * 16, 7 + hh(74) * 6, 4 + hh(75) * 3, p) }
-                if (hh(81) < 0.05) {
-                    p.color = 0xff8d8f88.toInt(); oval(g, px + 6 + hh(82) * 20, py + 10 + hh(83) * 16, 2.4f, 1.6f, p)
-                    p.color = 0xffb8bab2.toInt(); val ax = px + 5 + hh(82) * 20; val ay = py + 9 + hh(83) * 16; g.drawRect(ax, ay, ax + 1.5f, ay + 1, p)
-                }
-                if (hh(91) < 0.035) {
-                    p.color = 0xff3f6e2a.toInt(); g.drawCircle(px + 16, py + 18, 5f, p); g.drawCircle(px + 21, py + 20, 4f, p)
-                    p.color = 0xff5c9440.toInt(); g.drawCircle(px + 15, py + 16, 2.5f, p)
-                }
-                if (hh(99) < 0.04) {
-                    p.color = intArrayOf(0xfff0e070.toInt(), 0xfff4f4f4.toInt(), 0xffd070c0.toInt())[(hh(98) * 3).toInt()]
-                    g.drawRect(px + 10, py + 14, px + 13, py + 17, p); g.drawRect(px + 18, py + 20, px + 21, py + 23, p)
-                }
+            if (t != T_GRASS) continue
+            val px0 = (tx - x0) * T
+            val py0 = (ty - y0) * T
+            fun hh(s: Int) = hash2(tx, ty, s).toFloat()
+            if (hh(71) < 0.05) { p.color = rgba(110, 88, 56, .22); oval(g, px0 + 8 + hh(72) * 16, py0 + 8 + hh(73) * 16, 7 + hh(74) * 6, 4 + hh(75) * 3, p) }
+            if (hh(81) < 0.05) {
+                val ax = px0 + 6 + hh(82) * 20
+                val ay = py0 + 10 + hh(83) * 16
+                p.color = rgba(0, 0, 0, .18); oval(g, ax + 0.8f, ay + 1f, 2.6f, 1.4f, p)
+                p.color = 0xff8d8f88.toInt(); oval(g, ax, ay, 2.4f, 1.6f, p)
+                p.color = 0xffc4c6be.toInt(); oval(g, ax - 0.6f, ay - 0.6f, 1.1f, 0.7f, p)
+            }
+            if (hh(91) < 0.035) {
+                p.color = rgba(0, 0, 0, .2); oval(g, px0 + 19, py0 + 22, 7f, 3f, p)
+                p.color = 0xff3a6826.toInt(); g.drawCircle(px0 + 16, py0 + 18, 5f, p); g.drawCircle(px0 + 21, py0 + 20, 4f, p)
+                p.color = 0xff5c9440.toInt(); g.drawCircle(px0 + 15, py0 + 16, 2.5f, p); g.drawCircle(px0 + 20.5f, py0 + 18.5f, 1.8f, p)
+            }
+            if (hh(99) < 0.05) {
+                val col = intArrayOf(0xfff0e070.toInt(), 0xfff4f4f4.toInt(), 0xffd070c0.toInt(), 0xffe86a5a.toInt())[(hh(98) * 4).toInt()]
+                p.color = col
+                for (q in 0 until 4) g.drawCircle(px0 + 6 + hash2(tx, ty, 200 + q).toFloat() * 20, py0 + 8 + hash2(tx, ty, 210 + q).toFloat() * 18, 1.3f, p)
             }
         }
         // деревья, сверху вниз (с соседями по краям, чтобы кроны и тени не резались на стыках)
         val pt = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
         for (ty in max(0, y0 - 1) until min(G.H, y0 + CH)) for (tx in max(0, x0 - 2) until min(G.W, x0 + CH + 1)) {
             if (G.terrain[G.idx(tx, ty)].toInt() != T_FOREST) continue
-            val px = (tx - x0) * T
-            val py = (ty - y0) * T
-            if (tx >= x0 && tx < x0 + CH && ty >= y0) { p.color = rgba(30, 55, 20, .16); oval(g, px + 16, py + 17, 17f, 14f, p) }
+            val px0 = (tx - x0) * T
+            val py0 = (ty - y0) * T
+            if (tx >= x0 && tx < x0 + CH && ty >= y0) { p.color = rgba(20, 40, 14, .2); oval(g, px0 + 16, py0 + 17, 17f, 14f, p) }
             val n = if (hash2(tx, ty, 11) < 0.45) 2 else 1
             for (k in 0 until n) {
-                val ox = px + (if (n == 1) 10 + hash2(tx, ty, 1).toFloat() * 12 else 4 + k * 16 + hash2(tx, ty, k * 3 + 1).toFloat() * 8)
-                val oy = py + 14 + k * 9 + hash2(tx, ty, k * 3 + 2).toFloat() * 8
+                val ox = px0 + (if (n == 1) 10 + hash2(tx, ty, 1).toFloat() * 12 else 4 + k * 16 + hash2(tx, ty, k * 3 + 1).toFloat() * 8)
+                val oy = py0 + 14 + k * 9 + hash2(tx, ty, k * 3 + 2).toFloat() * 8
                 val conifer = fbm(tx / 9.0, ty / 9.0, G.seed + 31) < 0.5
                 spr.drawTree(g, ox, oy, (if (conifer) 0 else 4) + (hash2(tx, ty, k * 3 + 3) * 4).toInt(), pt)
             }
         }
-        chunks[key] = bmp
-        return bmp
+        val h = bmp.copy(Bitmap.Config.HARDWARE, false)
+        return if (h != null) { bmp.recycle(); h } else bmp
+    }
+
+    /** грубая подложка, пока кусок не готов */
+    private fun lowRes(G: Game): Bitmap {
+        if (G.miniDirty || miniBase == null || miniBase!!.width != G.W) buildMiniBase(G)
+        return miniBase!!
     }
 
     // ------------------------------------------------------------ туман
@@ -230,11 +246,24 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         c.translate(-G.camX.toFloat(), -G.camY.toFloat())
         val v = G.viewRect()
         val cs = CH * TILE
+        val chunkScale = if (dens * z >= 1.5) 2 else 1
         val nCy = ceil(G.H.toDouble() / CH).toInt() - 1
         val nCx = ceil(G.W.toDouble() / CH).toInt() - 1
         for (cy in max(0, floor(v[1] / cs).toInt())..min(nCy, floor((v[3] + CPAD) / cs).toInt()))
             for (cx in max(0, floor(v[0] / cs).toInt())..min(nCx, floor(v[2] / cs).toInt()))
-                c.drawBitmap(getChunk(G, cx, cy), (cx * cs).toFloat(), (cy * cs - CPAD).toFloat(), pb)
+            {
+                val bmp = chunkFor(G, cx, cy, chunkScale)
+                rf.set((cx * cs).toFloat(), (cy * cs - CPAD).toFloat(), (cx * cs + CH * TILE + 2).toFloat(), (cy * cs + CH * TILE + 2).toFloat())
+                if (bmp != null) c.drawBitmap(bmp, null, rf, pb)
+                else {
+                    val lr = lowRes(G)
+                    val sx = cx * CH
+                    val sy = cy * CH
+                    lowSrc.set(sx, sy, min(G.W, sx + CH), min(G.H, sy + CH))
+                    rf.set((sx * TILE).toFloat(), (sy * TILE).toFloat(), (lowSrc.right * TILE).toFloat(), (lowSrc.bottom * TILE).toFloat())
+                    c.drawBitmap(lr, lowSrc, rf, pb)
+                }
+            }
         // декали
         for (d in G.decals) {
             if (d.x < v[0] - 100 || d.x > v[2] + 100 || d.y < v[1] - 100 || d.y > v[3] + 100) continue
@@ -424,6 +453,9 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         ps.strokeWidth = 1.5f
         for (ty in y0..y1) for (tx in x0..x1) {
             if (G.terrain[ty * G.W + tx].toInt() != T_WATER) continue
+            // блики только в открытой воде: берег уже нарисован плавным в текстуре земли
+            fun wet(dx: Int, dy: Int) = !G.inB(tx + dx, ty + dy) || G.terrain[(ty + dy) * G.W + tx + dx].toInt() == T_WATER
+            if (!(wet(0, -1) && wet(0, 1) && wet(-1, 0) && wet(1, 0))) continue
             val px = tx * T
             val py = ty * T
             val h = hash2(tx, ty, 7)
@@ -435,14 +467,6 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
             val bx = (px + 14 - h * 8).toFloat()
             val by = (py + 20 - ((h * 53) % 1) * 10).toFloat()
             c.drawRect(bx, by, bx + 4, by + 1, pf)
-            // пена у берега
-            ps.color = rgba(240, 250, 255, 0.25 + 0.2 * sin(t * 2 + h * 6))
-            fun land(dx: Int, dy: Int) = G.inB(tx + dx, ty + dy) && G.terrain[(ty + dy) * G.W + tx + dx].toInt() != T_WATER
-            val o = (1.5 + sin(t * 1.8 + h * 5)).toFloat()
-            if (land(0, -1)) c.drawLine(px, py + o, px + T, py + o, ps)
-            if (land(0, 1)) c.drawLine(px, py + T - o, px + T, py + T - o, ps)
-            if (land(-1, 0)) c.drawLine(px + o, py, px + o, py + T, ps)
-            if (land(1, 0)) c.drawLine(px + T - o, py, px + T - o, py + T, ps)
         }
     }
 
@@ -514,7 +538,12 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     private val mc = Canvas(mini)
 
     fun drawMini(G: Game) {
-        if (G.miniDirty || miniBase == null || miniBase!!.width != G.W) {
+        if (G.miniDirty || miniBase == null || miniBase!!.width != G.W) buildMiniBase(G)
+        drawMiniRest(G)
+    }
+
+    private fun buildMiniBase(G: Game) {
+        run {
             val px = IntArray(G.W * G.H)
             for (i in px.indices) {
                 px[i] = when (G.terrain[i].toInt()) {
@@ -525,6 +554,9 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
             b.setPixels(px, 0, G.W, 0, 0, G.W, G.H)
             miniBase = b; G.miniDirty = false
         }
+    }
+
+    private fun drawMiniRest(G: Game) {
         syncFog(G)
         val S = 150f
         val s = S / G.W
