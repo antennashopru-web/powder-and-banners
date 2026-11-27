@@ -183,7 +183,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         col.addView(View(this).apply { background = grad(0x00d9a84a, 0x00d9a84a, 0f).apply {
             orientation = GradientDrawable.Orientation.LEFT_RIGHT; colors = intArrayOf(0x00d9a84a, GILT, 0x00d9a84a)
         } }, LinearLayout.LayoutParams(dp(220), dp(2)).apply { topMargin = dp(10); bottomMargin = dp(10) })
-        col.addView(tv("сделаем мир лучше", 19f, CREAM).apply { setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.08f; alpha = 0.9f })
+        col.addView(tv("сделаем мир лучше", 19f, CREAM).apply { gravity = Gravity.CENTER; setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.08f; alpha = 0.9f })
         f.addView(col, lp(MP, WC, Gravity.CENTER))
         col.alpha = 0f; col.scaleX = 0.92f; col.scaleY = 0.92f
         col.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(900).start()
