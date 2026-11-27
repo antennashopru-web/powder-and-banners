@@ -260,6 +260,13 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             G?.let { g ->
                 g.speed = it.getIntExtra("speed", 1).coerceIn(1, 3)
                 if (it.getBooleanExtra("autopilot", false)) { g.autopilot(); autoCam = true }
+                if (it.getBooleanExtra("dragons", false)) {
+                    // для проверки: свои драконы у ратуши и вражеский дракон рядом
+                    val h = g.blds.first { b -> b.team == 0 && b.type == B_HALL }
+                    for (k in 0 until 3) g.spawnUnit(U_DRAGON, 0, h.x + 70 + k * 30, h.y + 60 + (k % 2) * 25)
+                    g.spawnUnit(U_DRAGON, 1, h.x + 260, h.y - 120)
+                    g.computePop()
+                }
                 if (it.hasExtra("zoom")) { g.camZ = it.getFloatExtra("zoom", 1f).toDouble().coerceIn(0.45, 2.0); g.clampCam() }
             }
         } else startDemo()
@@ -472,6 +479,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "<b>Отряды 1·2·3:</b> выделите войска и нажмите кнопку с номером — отряд запомнится. Потом одно нажатие выбирает его, второе подряд — переносит к нему камеру. Удержание — запомнить заново.",
             "<b>Сохранение:</b> в паузе есть «Сохранить игру», а при сворачивании игра сохраняется сама. Продолжить можно из главного меню.",
             "<b>Войска:</b> пикинёры держат конницу, мушкетёры бьют залпом издалека, рейтары быстры, пушки рушат здания и строи.",
+            "<b>Драконы:</b> стройте логово дракона. Драконы летают над лесом и водой и жгут огнём всё вокруг цели. Пикинёры, рейтары и пушки до них не достают: сбивают их мушкетёры, башни и ратуша.",
         )
         for (p in ps) help.addView(tv(html(p), 13.5f).apply { setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0) })
         help.addView(tv(html("<b>Графика:</b> 3D-модели персонажей и зданий — KayKit (Kay Lousberg, www.kaylousberg.com), лицензия CC0. Пики, мушкеты, кони и пушки — свои."), 12f).apply {
@@ -857,7 +865,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private var demolishT = 0L
 
     private fun plural(t: Int) = when (t) {
-        U_PEASANT -> "крестьяне"; U_PIKE -> "пикинёры"; U_MUSKET -> "мушкетёры"; U_CAV -> "рейтары"; else -> "пушки"
+        U_PEASANT -> "крестьяне"; U_PIKE -> "пикинёры"; U_MUSKET -> "мушкетёры"; U_CAV -> "рейтары"; U_DRAGON -> "драконы"; else -> "пушки"
     }
 
     private fun tradeBtn(label: String, ok: Boolean, f: () -> Unit) {

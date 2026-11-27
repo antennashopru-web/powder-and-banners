@@ -293,7 +293,12 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             var fa: Int
             var fb: Int
             var mix = 0f
-            if (u.working) {
+            if (UNIT[u.type].fly && u.hitT <= 0) {
+                // крылья машут всегда, и в полёте, и на месте
+                val ph = u.anim * (if (u.moving) 10 else 7)
+                val i = floor(ph).toInt()
+                fa = Models3D.F_WALK + Math.floorMod(i, 8); fb = Models3D.F_WALK + Math.floorMod(i + 1, 8); mix = (ph - i).toFloat()
+            } else if (u.working) {
                 val k = floor(u.anim * 5).toInt() % 4
                 fa = Models3D.F_ACT + (if (k == 3) 1 else k); fb = fa
             } else if (u.aimT > 0) {

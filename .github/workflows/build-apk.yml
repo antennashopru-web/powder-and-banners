@@ -92,6 +92,14 @@ jobs:
             adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ez autopilot true --ei speed 3 --ez gfx2d true
             sleep 40
             adb exec-out screencap -p > shots/7-2d.png
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ez autopilot true --ei speed 1 --ez dragons true --ef zoom 1.5 --ef yaw 0.4
+            sleep 22
+            adb exec-out screencap -p > shots/8-dragons.png
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ez autopilot true --ei speed 1 --ez dragons true --ef zoom 1.5 --ez gfx2d true
+            sleep 22
+            adb exec-out screencap -p > shots/9-dragons-2d.png
             adb logcat -d > shots/logcat.txt || true
 
       - uses: actions/upload-artifact@v4

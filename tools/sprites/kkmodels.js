@@ -261,7 +261,7 @@ function kkUnitAtlas(type, build) {
       w.rotation.z = side * Math.PI / 2 * 0.95; w.position.set(side * 8, 4, 0); inner.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
       return [w, 0];
     }
-    return [build(team, fr.kind === 'dead' ? { kind: 'idle' } : fr), -d * Math.PI / 4];
+    return [build(team, fr.kind === 'dead' && type !== 'dragon' ? { kind: 'idle' } : fr), -d * Math.PI / 4];
   }));
   const big = 360, R = renderSet(makers, big, big / 2, Math.round(big * 0.62)), cols = FRAMES.length;
   const atlas = document.createElement('canvas'); atlas.width = R.w * cols; atlas.height = R.h * 16;
@@ -307,7 +307,7 @@ function kkNature() {
 window.kkRenderAll = async function (only) {
   await kkLoad();
   const res = { units: {}, blds: {} };
-  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon };
+  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon };
   for (const t in U) if (!only || only.includes(t)) res.units[t] = kkUnitAtlas(t, U[t]);
   if (!only || only.includes('blds')) res.blds = kkBuildingAtlas();
   if (!only || only.includes('nature')) Object.assign(res, kkNature());

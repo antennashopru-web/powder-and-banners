@@ -42,7 +42,7 @@ class UDef(
     val key: String, val name: String, val hp: Int, val atk: Double, val range: Double, val cd: Double,
     val spd: Double, val sight: Int, val cost: IntArray, val time: Double, val pop: Int, val r: Double,
     val desc: String, val vsCav: Double = 0.0, val ranged: Boolean = false, val cav: Boolean = false,
-    val splash: Double = 0.0, val vsBld: Double = 0.0,
+    val splash: Double = 0.0, val vsBld: Double = 0.0, val fly: Boolean = false,
 )
 
 const val U_PEASANT = 0
@@ -50,6 +50,7 @@ const val U_PIKE = 1
 const val U_MUSKET = 2
 const val U_CAV = 3
 const val U_CANNON = 4
+const val U_DRAGON = 5
 
 val UNIT = arrayOf(
     UDef("peasant", "Крестьянин", 45, 3.0, 14.0, 1.2, 54.0, 6, cost(food = 50), 8.0, 1, 6.0, "Добывает ресурсы и строит"),
@@ -57,9 +58,11 @@ val UNIT = arrayOf(
     UDef("musket", "Мушкетёр", 70, 26.0, 190.0, 4.2, 42.0, 8, cost(food = 50, wood = 10, gold = 20), 11.0, 1, 6.0, "Мощный выстрел, долгая перезарядка", ranged = true),
     UDef("cav", "Рейтар", 180, 16.0, 22.0, 1.1, 96.0, 7, cost(food = 80, gold = 50), 13.0, 2, 9.0, "Быстрая тяжёлая конница", cav = true),
     UDef("cannon", "Пушка", 150, 70.0, 340.0, 7.0, 26.0, 9, cost(wood = 150, stone = 80, gold = 120), 20.0, 3, 9.0, "Рушит здания и плотные строи", ranged = true, splash = 46.0, vsBld = 3.0),
+    UDef("dragon", "Дракон", 600, 26.0, 70.0, 2.4, 72.0, 9, cost(food = 250, stone = 50, gold = 160), 30.0, 4, 13.0,
+        "Летит над лесом и водой, жжёт огнём. Сбить можно только стрельбой", ranged = true, splash = 36.0, vsBld = 1.8, fly = true),
 )
 // pike 0, musket 1, cav 2, cannon 3, peasant 4
-val FORM_ORDER = intArrayOf(4, 0, 1, 2, 3)
+val FORM_ORDER = intArrayOf(4, 0, 1, 2, 3, 5)
 
 class BDef(
     val key: String, val name: String, val w: Int, val h: Int, val hp: Int, val cost: IntArray, val time: Double,
@@ -75,6 +78,7 @@ const val B_BARRACKS = 4
 const val B_STABLE = 5
 const val B_FOUNDRY = 6
 const val B_TOWER = 7
+const val B_LAIR = 8
 
 val BLD = arrayOf(
     BDef("hall", "Ратуша", 3, 3, 2400, cost(wood = 300, stone = 200), 60.0, 9, "Сердце поселения: крестьяне и склад", pop = 15, drop = true, trains = intArrayOf(U_PEASANT), atk = 8.0, range = 200.0, cd = 2.0),
@@ -85,15 +89,16 @@ val BLD = arrayOf(
     BDef("stable", "Конюшня", 3, 3, 1200, cost(wood = 200, stone = 50, gold = 50), 40.0, 6, "Рейтары", trains = intArrayOf(U_CAV)),
     BDef("foundry", "Литейня", 3, 3, 1400, cost(wood = 200, stone = 150, gold = 100), 50.0, 6, "Пушки", trains = intArrayOf(U_CANNON)),
     BDef("tower", "Башня", 2, 2, 1000, cost(wood = 50, stone = 150), 30.0, 9, "Стреляет по врагам", atk = 15.0, range = 230.0, cd = 1.8),
+    BDef("lair", "Логово дракона", 3, 3, 1600, cost(wood = 250, stone = 250), 55.0, 7, "Драконы: летают и жгут огнём", trains = intArrayOf(U_DRAGON)),
 )
-val BUILD_LIST = intArrayOf(B_HOUSE, B_FARM, B_STORE, B_BARRACKS, B_STABLE, B_FOUNDRY, B_TOWER, B_HALL)
+val BUILD_LIST = intArrayOf(B_HOUSE, B_FARM, B_STORE, B_BARRACKS, B_STABLE, B_FOUNDRY, B_LAIR, B_TOWER, B_HALL)
 
-class Diff(val mult: Double, val peas: Int, val wave: Int, val grow: Int, val interval: Double, val first: Double, val pace: Double, val cannons: Int, val bonus: Int)
+class Diff(val mult: Double, val peas: Int, val wave: Int, val grow: Int, val interval: Double, val first: Double, val pace: Double, val cannons: Int, val bonus: Int, val dragons: Int)
 
 val DIFF = arrayOf(
-    Diff(0.7, 16, 6, 3, 260.0, 620.0, 1.5, 1, 0),
-    Diff(1.0, 24, 10, 4, 210.0, 450.0, 1.0, 2, 100),
-    Diff(1.4, 32, 12, 5, 170.0, 330.0, 0.75, 4, 300),
+    Diff(0.7, 16, 6, 3, 260.0, 620.0, 1.5, 1, 0, 0),
+    Diff(1.0, 24, 10, 4, 210.0, 450.0, 1.0, 2, 100, 1),
+    Diff(1.4, 32, 12, 5, 170.0, 330.0, 0.75, 4, 300, 2),
 )
 
 val DX = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)

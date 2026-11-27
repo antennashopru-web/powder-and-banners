@@ -400,6 +400,15 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         var dy = gy - u.y
         val dist = hyp(dx, dy)
         if (dist <= g.arrive + (if (rect != null) u.r else 0.0)) { u.goal = null; return true }
+        if (UNIT[u.type].fly) {
+            // летит напрямик над лесом, водой и домами
+            val step = min(UNIT[u.type].spd * dt, dist)
+            u.x = clamp(u.x + dx / dist * step, 4.0, W * TILE - 4.0); u.y = clamp(u.y + dy / dist * step, 4.0, H * TILE - 4.0)
+            if (abs(dx) > 0.5) u.face = if (dx > 0) 1 else -1
+            if (dist > 2) u.dir = dirOf(dx, dy)
+            u.moving = true; u.anim += dt
+            return false
+        }
         var tx = gx
         var ty = gy
         var prog = dist
@@ -451,7 +460,11 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         }
     }
 
-    fun findEnemyAt(x: Double, y: Double, team: Int, radius: Double, unitsOnly: Boolean): Ent? {
+    /** кто может бить летающих: стрелки (кроме пушек), башни и ратуша */
+    fun canHitAir(u: Unt) = UNIT[u.type].ranged && u.type != U_CANNON
+    fun flies(e: Ent?) = e is Unt && UNIT[e.type].fly
+
+    fun findEnemyAt(x: Double, y: Double, team: Int, radius: Double, unitsOnly: Boolean, air: Boolean = true): Ent? {
         val r = ceil(radius / TILE).toInt()
         val cx = fl(x / TILE)
         val cy = fl(y / TILE)
@@ -466,7 +479,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             while (k >= 0) {
                 val v = units[k]
                 k = uNext[k]
-                if (v.team == team || v.dead) continue
+                if (v.team == team || v.dead || (!air && UNIT[v.type].fly)) continue
                 val d2 = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y)
                 if (d2 < bd) { bd = d2; best = v }
             }
@@ -522,14 +535,15 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             if (u.type != U_PEASANT && u.cmd != CMD_MOVE) {
                 val t = u.target
                 if (t == null) {
-                    val e = findEnemyAt(u.x, u.y, u.team, d.sight * TILE.toDouble(), false)
+                    val e = findEnemyAt(u.x, u.y, u.team, d.sight * TILE.toDouble(), false, canHitAir(u))
                     if (e != null) { u.target = e; u.goal = null }
                 } else if (t.kind == K_B && u.cmd != CMD_ATTACK) {
-                    val e = findEnemyAt(u.x, u.y, u.team, d.sight * TILE.toDouble(), true)
+                    val e = findEnemyAt(u.x, u.y, u.team, d.sight * TILE.toDouble(), true, canHitAir(u))
                     if (e != null) { u.target = e; u.goal = null }
                 }
             }
         }
+        if (d.fly && !u.moving) u.anim += dt
         if (u.target != null) doCombat(u, dt)
         else if (u.task != null) peasantTask(u, dt)
         else if (u.goal != null && steer(u, dt) && (u.cmd == CMD_MOVE || u.cmd == CMD_AMOVE)) u.cmd = CMD_NONE
@@ -555,6 +569,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     private fun doCombat(u: Unt, dt: Double) {
         val t = u.target!!
         val d = UNIT[u.type]
+        if (flies(t) && !canHitAir(u)) { u.target = null; u.goal = null; if (u.cmd == CMD_ATTACK) u.cmd = CMD_NONE; return }
         val dist = distTo(u, t)
         if (dist <= d.range) {
             u.goal = null
@@ -608,6 +623,29 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             host.sfx(S_SHOT, u.x, u.y)
             val hitP = clamp(0.95 - dist / 450, 0.45, 0.95)
             if (rnd() < hitP) damage(t, d.atk * m, u)
+        } else if (u.type == U_DRAGON) {
+            // огненное дыхание: струя огня до цели, ожоги всем рядом на земле
+            val a = Math.atan2(t.y - u.y, t.x - u.x)
+            val sx = u.x + Math.cos(a) * 22
+            val sy = u.y + Math.sin(a) * 22
+            for (i in 0..6) {
+                val k = i / 6.0
+                boom(sx + (t.x - sx) * k + (rnd() - 0.5) * 6, sy + (t.y - sy) * k + (rnd() - 0.5) * 6, 0.35 + k * 0.25, 7 + k * 12)
+            }
+            for (i in 0 until 6) {
+                val e = Fx(FX_EMBER, t.x + (rnd() - 0.5) * 20, t.y + (rnd() - 0.5) * 14, 0.8 + rnd() * 0.5)
+                e.vx = (rnd() - 0.5) * 20; e.vy = -16 - rnd() * 14; fx.add(e)
+            }
+            smoke(t.x, t.y, (rnd() - 0.5) * 8, -12.0, 1.6, 7.0, true)
+            u.hitT = 0.35
+            host.sfx(S_IMPACT, t.x, t.y)
+            damage(t, d.atk * m, u)
+            for (v in ArrayList(units)) {
+                if (v === t || v.dead || v.team == u.team || UNIT[v.type].fly) continue
+                val dd = hyp(v.x - t.x, v.y - t.y)
+                if (dd < d.splash) damage(v, d.atk * 0.45 * (1 - dd / d.splash * 0.5), u)
+            }
+            if (t.kind != K_B) for (b in ArrayList(blds)) if (b.team != u.team && !b.dead && distRectPt(t.x, t.y, entRect(b)) < d.splash * 0.5) damage(b, d.atk * d.vsBld * 0.5, u)
         } else if (u.type == U_CANNON) {
             val tx = t.x + (rnd() - 0.5) * 22
             val ty = t.y + (rnd() - 0.5) * 22
@@ -627,7 +665,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     fun damage(t: Ent, amt: Double, src: Ent?) {
         if (t.dead) return
         t.hp -= amt
-        if (t is Unt && src != null && !src.dead && src.kind == K_U && t.target == null && t.cmd != CMD_MOVE) {
+        if (t is Unt && src != null && !src.dead && src.kind == K_U && t.target == null && t.cmd != CMD_MOVE && (!flies(src) || canHitAir(t))) {
             if (t.type != U_PEASANT || t.task == null) t.target = src
         }
         if (t.team == 0 && time - lastAlert > 15) {
@@ -677,7 +715,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                     while (q >= 0) {
                         val v = units.getOrNull(q)
                         q = uNext[q]
-                        if (v != null && v.team != p.team && !v.dead) hit.add(v)
+                        if (v != null && v.team != p.team && !v.dead && !UNIT[v.type].fly) hit.add(v)
                     }
                 }
                 for (v in hit) { val d = hyp(v.x - p.tx, v.y - p.ty); if (d < p.splash) damage(v, p.dmg * (1 - d / p.splash * 0.6), p.src) }
@@ -701,7 +739,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                     q = uNext[q]
                     if (qq <= k) continue
                     val v = units[qq]
-                    if (v.dead) continue
+                    if (v.dead || UNIT[v.type].fly != UNIT[u.type].fly) continue
                     var dx = v.x - u.x
                     var dy = v.y - u.y
                     val rr = u.r + v.r
@@ -714,7 +752,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                     val ny = dy / d * push
                     val wu = if (u.working) 0.2 else if (u.moving) 0.6 else 1.0
                     val wv = if (v.working) 0.2 else if (v.moving) 0.6 else 1.0
-                    moveBy(u, -nx * wu, -ny * wu); moveBy(v, nx * wv, ny * wv)
+                    if (UNIT[u.type].fly) { u.x -= nx; u.y -= ny; v.x += nx; v.y += ny }
+                    else { moveBy(u, -nx * wu, -ny * wu); moveBy(v, nx * wv, ny * wv) }
                 }
             }
         }
@@ -1066,9 +1105,9 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     }
 
     // ============================================================ ИИ
-    private val ORDER_T = intArrayOf(B_FARM, B_BARRACKS, B_FARM, B_STORE, B_FARM, B_TOWER, B_STABLE, B_BARRACKS, B_FARM, B_FOUNDRY, B_TOWER, B_FARM, B_STABLE)
-    private val ORDER_AT = intArrayOf(0, 45, 90, 110, 170, 220, 240, 340, 360, 420, 480, 520, 600)
-    private val ORDER_N = intArrayOf(1, 1, 2, 1, 3, 1, 1, 2, 4, 1, 2, 5, 2)
+    private val ORDER_T = intArrayOf(B_FARM, B_BARRACKS, B_FARM, B_STORE, B_FARM, B_TOWER, B_STABLE, B_BARRACKS, B_FARM, B_FOUNDRY, B_TOWER, B_FARM, B_STABLE, B_LAIR)
+    private val ORDER_AT = intArrayOf(0, 45, 90, 110, 170, 220, 240, 340, 360, 420, 480, 520, 600, 680)
+    private val ORDER_N = intArrayOf(1, 1, 2, 1, 3, 1, 1, 2, 4, 1, 2, 5, 2, 1)
 
     private fun aiTick(team: Int) {
         val A = ai[team]!!
@@ -1102,9 +1141,11 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (pend.size < 2) {
             for (k in ORDER_T.indices) {
                 val type = ORDER_T[k]
+                if (type == B_LAIR && P.dragons == 0) continue
                 if (T >= ORDER_AT[k] && count(type) < ORDER_N[k]) { if (canAfford(team, BLD[type].cost)) aiBuild(team, type, A); break }
             }
         }
+        if (P.dragons > 0 && T >= 480 && count(B_LAIR) == 0 && count(B_BARRACKS) > 0 && pend.none { it.type == B_LAIR } && canAfford(team, BLD[B_LAIR].cost)) aiBuild(team, B_LAIR, A)
         val queued = halls.sumOf { h -> h.queue.count { it == U_PEASANT } }
         for (h in halls) if (h.built && peas.size + queued < P.peas && h.queue.size < 2) enqueue(h, U_PEASANT)
         val have = IntArray(4)
@@ -1126,16 +1167,19 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         val cannons = army.count { it.type == U_CANNON }
         val reserve = pend.isEmpty()
         val needHouse = cap[team] < POP_MAX && cap[team] - pop[team] < 6
-        for (b in myB) {
+        // копим золото на дракона, если логово готово
+        val saveGold = myB.any { it.type == B_LAIR && it.built } && army.count { it.type == U_DRAGON } < P.dragons && R[GOLD] < UNIT[U_DRAGON].cost[GOLD]
+        for (b in myB.sortedByDescending { it.type == B_LAIR }) {
             if (!b.built || b.queue.size >= 2) continue
             if (needHouse && R[WOOD] < 120 && b.type != B_HALL) continue
             if (b.type == B_BARRACKS) {
                 val mus = army.count { it.type == U_MUSKET }
                 val pk = army.count { it.type == U_PIKE }
-                val want = if (mus < pk) U_MUSKET else U_PIKE
-                if (!enqueue(b, want)) enqueue(b, if (want == U_MUSKET) U_PIKE else U_MUSKET)
-            } else if (b.type == B_STABLE && reserve) enqueue(b, U_CAV)
-            else if (b.type == B_FOUNDRY && cannons < P.cannons) enqueue(b, U_CANNON)
+                val want = if (mus < pk && !saveGold) U_MUSKET else U_PIKE
+                if (!enqueue(b, want) && !saveGold) enqueue(b, if (want == U_MUSKET) U_PIKE else U_MUSKET)
+            } else if (b.type == B_STABLE && reserve && !saveGold) enqueue(b, U_CAV)
+            else if (b.type == B_FOUNDRY && cannons < P.cannons && !saveGold) enqueue(b, U_CANNON)
+            else if (b.type == B_LAIR && army.count { it.type == U_DRAGON } + b.queue.size < P.dragons) enqueue(b, U_DRAGON)
         }
         val threat = findEnemyAt(A.hx, A.hy, team, 15.0 * TILE, true)
         if (threat != null) {
@@ -1279,7 +1323,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         var bd = 16.0
         for (u in units) {
             if (u.dead || !seen(u)) continue
-            val d = hyp(u.x - wx, u.y - 8 - wy)
+            val d = hyp(u.x - wx, u.y - (if (UNIT[u.type].fly) 56 else 8) - wy)
             if (d < bd + u.r * 0.5) { bd = d; best = u }
         }
         if (best != null) return best
@@ -1341,8 +1385,10 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             sel = arrayListOf(hit); uiDirty = true; host.sfx(S_CLICK, Double.NaN, Double.NaN); return
         }
         if (sel0.isNotEmpty()) {
-            if (hit != null && (hit.kind == K_U || hit.kind == K_B) && hit.team == 1) {
-                for (u in sel0) { u.task = null; u.goal = null; u.target = hit; u.cmd = CMD_ATTACK }
+            val shooters = if (flies(hit)) sel0.filter { canHitAir(it) } else sel0
+            if (hit != null && (hit.kind == K_U || hit.kind == K_B) && hit.team == 1 && shooters.isNotEmpty()) {
+                if (shooters.size < sel0.size) groupMove(sel0.filter { !canHitAir(it) }, hit.x, hit.y, CMD_MOVE)
+                for (u in shooters) { u.task = null; u.goal = null; u.target = hit; u.cmd = CMD_ATTACK }
                 marker(hit.x, hit.y - 6, 0xffff4a3a.toInt()); host.sfx(S_ORDER, Double.NaN, Double.NaN); amove = false; uiDirty = true; return
             }
             val peas = sel0.filter { it.type == U_PEASANT }

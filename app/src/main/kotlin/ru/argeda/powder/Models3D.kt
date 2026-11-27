@@ -25,13 +25,13 @@ class Model3D(
 
 object Models3D {
     // порядок важен: номер модели = индекс в этом списке
-    const val M_UNIT = 0          // + тип отряда (5)
-    const val M_BLD = 5           // + тип здания (8)
-    const val M_TREE = 13         // + вид дерева (8)
-    const val M_GOLD = 21
-    const val M_STONE = 22
-    const val M_SCAFFOLD = 23
-    const val COUNT = 24
+    const val M_UNIT = 0                    // + тип отряда
+    val M_BLD = UNIT.size                   // + тип здания
+    val M_TREE = M_BLD + BLD.size           // + вид дерева (8)
+    val M_GOLD = M_TREE + 8
+    val M_STONE = M_GOLD + 1
+    val M_SCAFFOLD = M_STONE + 1
+    val COUNT = M_SCAFFOLD + 1
 
     // кадры анимации отрядов
     const val F_IDLE = 0
