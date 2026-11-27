@@ -1306,9 +1306,11 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     private var lastTapT = 0L
     private var lastTapId = 0
 
-    fun tapWorld(wx: Double, wy: Double) {
+    fun tapWorld(wx: Double, wy: Double) = tapAt(wx, wy, if (placing != null) null else pickAt(wx, wy))
+
+    /** тап по точке мира; hit — что под пальцем (в 3D его ищут по экрану) */
+    fun tapAt(wx: Double, wy: Double, hit: Ent?) {
         if (placing != null) { setGhost(wx, wy); return }
-        val hit = pickAt(wx, wy)
         val sel0 = ownSelUnits()
         val now = System.nanoTime() / 1_000_000
         if (hit is Unt && hit.team == 0 && !amove) {
@@ -1386,7 +1388,11 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         val b = min(y0, y1)
         val c = max(x0, x1)
         val d = max(y0, y1)
-        val list = units.filter { it.team == 0 && !it.dead && it.x >= a && it.x <= c && it.y - 6 >= b - 6 && it.y - 6 <= d + 6 }
+        selectUnits(units.filter { it.team == 0 && !it.dead && it.x >= a && it.x <= c && it.y - 6 >= b - 6 && it.y - 6 <= d + 6 })
+    }
+
+    /** выделить свои отряды рамкой: если среди крестьян есть заметная армия, берётся только армия */
+    fun selectUnits(list: List<Unt>) {
         val mil = list.filter { it.type != U_PEASANT }
         sel = ArrayList(if (mil.isNotEmpty() && mil.size < list.size && mil.size >= 3) mil else list)
         uiDirty = true

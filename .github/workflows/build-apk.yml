@@ -84,6 +84,14 @@ jobs:
             sleep 120
             adb exec-out screencap -p > shots/5-battle.png
             adb shell dumpsys gfxinfo ru.argeda.powder > shots/gfxinfo.txt || true
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ez autopilot true --ei speed 3 --ef yaw 0.8 --ef zoom 1.6
+            sleep 60
+            adb exec-out screencap -p > shots/6-rotated.png
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ez autopilot true --ei speed 3 --ez gfx2d true
+            sleep 40
+            adb exec-out screencap -p > shots/7-2d.png
             adb logcat -d > shots/logcat.txt || true
 
       - uses: actions/upload-artifact@v4

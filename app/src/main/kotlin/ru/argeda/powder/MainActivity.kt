@@ -1,6 +1,7 @@
 package ru.argeda.powder
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -58,6 +59,12 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private var spr: Sprites? = null
     private var sfx: Sfx? = null
     private var gv: GameView? = null
+    private var v3: View3D? = null
+    private var models: Array<Model3D>? = null
+    private val prefs by lazy { getSharedPreferences("powder", Context.MODE_PRIVATE) }
+    private val gl3 by lazy { (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).deviceConfigurationInfo.reqGlEsVersion >= 0x30000 }
+    /** настоящее 3D (OpenGL ES 3) или прежняя 2D-картинка */
+    private var use3d = true
     private var miniV: MiniView? = null
     private val G get() = gv?.game
 
@@ -158,6 +165,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         Thread {
             val s = Sprites(assets)
             val a = try { Sfx(this) } catch (e: Exception) { null }
+            if (gl3) models = try { Models3D.load(assets) } catch (e: Throwable) { android.util.Log.e("Powder3D", "models", e); null }
             runOnUiThread { onLoaded(s, a) }
         }.start()
     }
@@ -204,8 +212,16 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         val v = GameView(this, s)
         gv = v
         root.addView(v, 0, lp(MP, MP))
+        var at = 1
+        models?.let { ms ->
+            val w = View3D(this, v, ms)
+            w.renderer.onFail = { msg -> runOnUiThread { toast("3D не работает на этом устройстве, включена 2D-графика"); set3d(false, save = false) } }
+            v3 = w
+            root.addView(w, at++, lp(MP, MP))
+        }
         buildHud(s)
-        root.addView(hud, 1, lp(MP, MP))
+        root.addView(hud, at, lp(MP, MP))
+        set3d(use3d && v3 != null, save = false)
         hud.visibility = View.GONE
         pauseM = buildPause(); root.addView(pauseM, lp(MP, MP)); pauseM.visibility = View.GONE
         endM = buildEnd(); root.addView(endM, lp(MP, MP)); endM.visibility = View.GONE
@@ -238,10 +254,13 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         if (it != null && it.hasExtra("start")) {
             optDiff = it.getIntExtra("start", 1).coerceIn(0, 2)
             optSize = it.getIntExtra("size", 80)
+            if (it.getBooleanExtra("gfx2d", false)) set3d(false, save = false)
+            v3?.cam?.yaw = it.getFloatExtra("yaw", 0f).toDouble()
             startGame()
             G?.let { g ->
                 g.speed = it.getIntExtra("speed", 1).coerceIn(1, 3)
                 if (it.getBooleanExtra("autopilot", false)) { g.autopilot(); autoCam = true }
+                if (it.hasExtra("zoom")) { g.camZ = it.getFloatExtra("zoom", 1f).toDouble().coerceIn(0.45, 2.0); g.clampCam() }
             }
         } else startDemo()
     }
@@ -280,6 +299,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     override fun onResume() {
         super.onResume()
+        v3?.onResume()
         hideBars()
     }
 
@@ -290,6 +310,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     override fun onPause() {
         super.onPause()
+        v3?.onPause()
         val g = G
         if (g != null && !demo && !g.over) saveGame()
         if (g != null && !demo && !g.paused && !g.over) togglePause()
@@ -425,6 +446,10 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         c.addView(menuIcons, LinearLayout.LayoutParams(WC, WC).apply { bottomMargin = dp(4) })
         c.addView(row("Противник", seg(arrayOf("Лёгкий", "Обычный", "Трудный"), 1) { optDiff = it }))
         c.addView(row("Карта", seg(arrayOf("Малая", "Средняя", "Большая"), 1) { optSize = intArrayOf(64, 80, 100)[it] }))
+        use3d = gl3 && prefs.getBoolean("3d", true)
+        gfxRow = row("Графика", seg(arrayOf("3D", "2D"), if (use3d) 0 else 1) { set3d(it == 0) })
+        gfxRow.visibility = if (gl3) View.VISIBLE else View.GONE
+        c.addView(gfxRow)
         startBtn = bigBtn("Загрузка…") { startGame() }
         startBtn.alpha = 0.6f
         c.addView(startBtn)
@@ -440,7 +465,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "<b>Цель:</b> разрушить все здания и войска противника.",
             "<b>Выбор:</b> тап по своему отряду или зданию. Двойной тап выбирает всех таких же на экране. Чтобы выделить рамкой, задержите палец и ведите (или нажмите «Рамка»).",
             "<b>Приказы:</b> тап по земле — идти строем, по врагу — атаковать, по лесу, шахте или ферме — добывать (крестьяне). «Натиск» — идти и бить всех по пути.",
-            "<b>Карта:</b> одним пальцем — двигать, двумя — масштаб, тап по мини-карте — перейти.",
+            "<b>Карта:</b> одним пальцем — двигать, двумя — масштаб, тап по мини-карте — перейти. В 3D поверните два пальца, чтобы развернуть камеру, а кнопка «🧭» вернёт её на север.",
             "<b>Хозяйство:</b> крестьяне рубят лес, ломают камень, моют золото и работают на фермах. Дома дают место для войск, рынок принимает добычу.",
             "<b>Рынок:</b> выберите рынок, чтобы купить или продать по 100 еды, дерева или камня за золото. Цены меняются от сделок.",
             "<b>Ремонт и снос:</b> выберите крестьян и тапните по повреждённому зданию — починят за дерево. У своего здания есть кнопка «Снести» (вернётся треть цены).",
@@ -564,6 +589,9 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         }
         speedBtn = tb("×1") { G?.let { it.speed = if (it.speed >= 3) 1 else it.speed + 1; syncHudButtons(it) } }
         top.addView(speedBtn, LinearLayout.LayoutParams(WC, dp(28)))
+        compassBtn = tb("🧭") { v3?.resetYaw() }
+        top.addView(compassBtn, LinearLayout.LayoutParams(WC, dp(28)).apply { marginStart = dp(6) })
+        compassBtn.visibility = if (use3d) View.VISIBLE else View.GONE
         top.addView(tb("❚❚") { togglePause() }, LinearLayout.LayoutParams(WC, dp(28)).apply { marginStart = dp(6) })
         hud.addView(top, lp(MP, dp(38), Gravity.TOP))
 
@@ -1014,7 +1042,8 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         val v = gv
         if (v?.game == null || isDestroyed) { looping = false; return }
         onFrame(v.step())
-        v.invalidate()
+        val w = v3
+        if (use3d && w != null) v.game?.let { w.frame(it) } else v.invalidate()
         Choreographer.getInstance().postFrameCallback(this)
     }
 
@@ -1091,7 +1120,21 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         s.play(kind, vol.toFloat())
     }
 
-    override fun chunksDirty(tx: Int, ty: Int, w: Int, h: Int) { gv?.chunksDirty(tx, ty, w, h) }
+    override fun chunksDirty(tx: Int, ty: Int, w: Int, h: Int) { gv?.chunksDirty(tx, ty, w, h); v3?.chunksDirty(tx, ty, w, h) }
+
+    /** переключить 3D / 2D: GameView в 3D остаётся невидимым (считает размеры, туман и мини-карту) */
+    private fun set3d(on: Boolean, save: Boolean = true) {
+        val w = v3
+        use3d = on && w != null
+        if (save) prefs.edit().putBoolean("3d", on).apply()
+        gv?.visibility = if (use3d) View.INVISIBLE else View.VISIBLE
+        w?.visibility = if (use3d) View.VISIBLE else View.GONE
+        if (::compassBtn.isInitialized) compassBtn.visibility = if (use3d) View.VISIBLE else View.GONE
+        if (::gfxRow.isInitialized) gfxRow.visibility = if (v3 != null) View.VISIBLE else View.GONE
+        gv?.invalidate()
+    }
+    private lateinit var compassBtn: TextView
+    private lateinit var gfxRow: View
 
     override fun ended(win: Boolean) {
         val g = G ?: return

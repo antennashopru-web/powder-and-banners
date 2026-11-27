@@ -25,6 +25,39 @@ import kotlin.math.sin
 
 fun rgba(r: Int, g: Int, b: Int, a: Double): Int = Color.argb((clamp(a, 0.0, 1.0) * 255).toInt(), r, g, b)
 
+
+/** мелкий декор на траве (камешки, кусты, цветы) для куска местности с левым верхним углом (x0, y0) в клетках */
+fun paintGrassDecor(G: Game, g: Canvas, x0: Int, y0: Int, p: Paint) {
+    val T = TILE.toFloat()
+    val rf = RectF()
+    fun oval(g: Canvas, x: Float, y: Float, rx: Float, ry: Float, p: Paint) { rf.set(x - rx, y - ry, x + rx, y + ry); g.drawOval(rf, p) }
+    for (ty in y0 until min(G.H, y0 + CH + 1)) for (tx in x0 until min(G.W, x0 + CH + 1)) {
+        val t = G.terrain[G.idx(tx, ty)].toInt()
+        if (t != T_GRASS) continue
+        val px0 = (tx - x0) * T
+        val py0 = (ty - y0) * T
+        fun hh(s: Int) = hash2(tx, ty, s).toFloat()
+        if (hh(71) < 0.05) { p.color = rgba(110, 88, 56, .22); oval(g, px0 + 8 + hh(72) * 16, py0 + 8 + hh(73) * 16, 7 + hh(74) * 6, 4 + hh(75) * 3, p) }
+        if (hh(81) < 0.05) {
+            val ax = px0 + 6 + hh(82) * 20
+            val ay = py0 + 10 + hh(83) * 16
+            p.color = rgba(0, 0, 0, .18); oval(g, ax + 0.8f, ay + 1f, 2.6f, 1.4f, p)
+            p.color = 0xff8d8f88.toInt(); oval(g, ax, ay, 2.4f, 1.6f, p)
+            p.color = 0xffc4c6be.toInt(); oval(g, ax - 0.6f, ay - 0.6f, 1.1f, 0.7f, p)
+        }
+        if (hh(91) < 0.035) {
+            p.color = rgba(0, 0, 0, .2); oval(g, px0 + 19, py0 + 22, 7f, 3f, p)
+            p.color = 0xff3a6826.toInt(); g.drawCircle(px0 + 16, py0 + 18, 5f, p); g.drawCircle(px0 + 21, py0 + 20, 4f, p)
+            p.color = 0xff5c9440.toInt(); g.drawCircle(px0 + 15, py0 + 16, 2.5f, p); g.drawCircle(px0 + 20.5f, py0 + 18.5f, 1.8f, p)
+        }
+        if (hh(99) < 0.05) {
+            val col = intArrayOf(0xfff0e070.toInt(), 0xfff4f4f4.toInt(), 0xffd070c0.toInt(), 0xffe86a5a.toInt())[(hh(98) * 4).toInt()]
+            p.color = col
+            for (q in 0 until 4) g.drawCircle(px0 + 6 + hash2(tx, ty, 200 + q).toFloat() * 20, py0 + 8 + hash2(tx, ty, 210 + q).toFloat() * 18, 1.3f, p)
+        }
+    }
+}
+
 /** Поле боя: шаг логики, отрисовка мира на Canvas и жесты пальцами. */
 @SuppressLint("ViewConstructor")
 class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
@@ -147,32 +180,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         g.translate(0f, CPAD.toFloat())
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         val T = TILE.toFloat()
-        // мелкий декор на траве
-        for (ty in y0 until min(G.H, y0 + CH + 1)) for (tx in x0 until min(G.W, x0 + CH + 1)) {
-            val t = G.terrain[G.idx(tx, ty)].toInt()
-            if (t != T_GRASS) continue
-            val px0 = (tx - x0) * T
-            val py0 = (ty - y0) * T
-            fun hh(s: Int) = hash2(tx, ty, s).toFloat()
-            if (hh(71) < 0.05) { p.color = rgba(110, 88, 56, .22); oval(g, px0 + 8 + hh(72) * 16, py0 + 8 + hh(73) * 16, 7 + hh(74) * 6, 4 + hh(75) * 3, p) }
-            if (hh(81) < 0.05) {
-                val ax = px0 + 6 + hh(82) * 20
-                val ay = py0 + 10 + hh(83) * 16
-                p.color = rgba(0, 0, 0, .18); oval(g, ax + 0.8f, ay + 1f, 2.6f, 1.4f, p)
-                p.color = 0xff8d8f88.toInt(); oval(g, ax, ay, 2.4f, 1.6f, p)
-                p.color = 0xffc4c6be.toInt(); oval(g, ax - 0.6f, ay - 0.6f, 1.1f, 0.7f, p)
-            }
-            if (hh(91) < 0.035) {
-                p.color = rgba(0, 0, 0, .2); oval(g, px0 + 19, py0 + 22, 7f, 3f, p)
-                p.color = 0xff3a6826.toInt(); g.drawCircle(px0 + 16, py0 + 18, 5f, p); g.drawCircle(px0 + 21, py0 + 20, 4f, p)
-                p.color = 0xff5c9440.toInt(); g.drawCircle(px0 + 15, py0 + 16, 2.5f, p); g.drawCircle(px0 + 20.5f, py0 + 18.5f, 1.8f, p)
-            }
-            if (hh(99) < 0.05) {
-                val col = intArrayOf(0xfff0e070.toInt(), 0xfff4f4f4.toInt(), 0xffd070c0.toInt(), 0xffe86a5a.toInt())[(hh(98) * 4).toInt()]
-                p.color = col
-                for (q in 0 until 4) g.drawCircle(px0 + 6 + hash2(tx, ty, 200 + q).toFloat() * 20, py0 + 8 + hash2(tx, ty, 210 + q).toFloat() * 18, 1.3f, p)
-            }
-        }
+        paintGrassDecor(G, g, x0, y0, p)
         // деревья, сверху вниз (с соседями по краям, чтобы кроны и тени не резались на стыках)
         val pt = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
         for (ty in max(0, y0 - 1) until min(G.H, y0 + CH)) for (tx in max(0, x0 - 2) until min(G.W, x0 + CH + 1)) {
@@ -203,6 +211,8 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         private set
     private var fogVer = -1
     private var fogPx = IntArray(0)
+    /** пиксели тумана после syncFog (ARGB, W×H) */
+    fun fogPixels(): IntArray = fogPx
 
     private var fogLvl = ByteArray(0)
 
