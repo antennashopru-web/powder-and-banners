@@ -79,7 +79,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     }
 
     override fun onDraw(c: Canvas) {
-        c.drawColor(0xff0b0805.toInt())
+        c.drawColor(0xff1e1810.toInt())
         game?.let { render(c, it) }
     }
 
@@ -204,14 +204,36 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     private var fogVer = -1
     private var fogPx = IntArray(0)
 
+    private var fogLvl = ByteArray(0)
+
+    /** Туман войны: мягкие края (сглаживание 3×3), неразведанное — тёмная «старая карта», разведанное — сумрак. */
     fun syncFog(G: Game) {
         if (fogBmp == null || fogBmp!!.width != G.W) {
-            fogBmp = Bitmap.createBitmap(G.W, G.H, Bitmap.Config.ARGB_8888); fogPx = IntArray(G.W * G.H); fogVer = -1
+            fogBmp = Bitmap.createBitmap(G.W, G.H, Bitmap.Config.ARGB_8888); fogPx = IntArray(G.W * G.H); fogLvl = ByteArray(G.W * G.H); fogVer = -1
         }
         if (fogVer == G.fogVer) return
         fogVer = G.fogVer
-        for (i in fogPx.indices) fogPx[i] = (if (G.visible[i].toInt() != 0) 0 else if (G.explored[i].toInt() != 0) 110 else 255) shl 24
-        fogBmp!!.setPixels(fogPx, 0, G.W, 0, 0, G.W, G.H)
+        val W = G.W
+        val H = G.H
+        for (i in fogLvl.indices) fogLvl[i] = (if (G.visible[i].toInt() != 0) 0 else if (G.explored[i].toInt() != 0) 1 else 2).toByte()
+        for (y in 0 until H) for (x in 0 until W) {
+            var a = 0
+            var u = 0
+            for (dy in -1..1) for (dx in -1..1) {
+                val wgt = if (dx == 0 && dy == 0) 4 else if (dx == 0 || dy == 0) 2 else 1
+                val xx = x + dx
+                val yy = y + dy
+                val l = if (xx < 0 || yy < 0 || xx >= W || yy >= H) 2 else fogLvl[yy * W + xx].toInt()
+                if (l == 1) a += 112 * wgt else if (l == 2) { a += 255 * wgt; u += wgt }
+            }
+            a /= 16
+            val k = u / 16f
+            val r = (12 + (30 - 12) * k).toInt()
+            val g = (14 + (24 - 14) * k).toInt()
+            val b = (24 + (16 - 24) * k).toInt()
+            fogPx[y * W + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        fogBmp!!.setPixels(fogPx, 0, W, 0, 0, W, H)
     }
 
     // ------------------------------------------------------------ кадр
@@ -353,11 +375,13 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
             val y: Float
             if (e is Bld) { w = e.w * TILE * 0.7f; x = e.x.toFloat() - w / 2; y = e.ty * TILE - 12f }
             else { val u = e as Unt; w = 16f; x = u.x.toFloat() - 8; y = u.y.toFloat() - (if (u.type == U_CAV) 38 else if (u.type == U_CANNON) 24 else 30) }
-            pf.color = rgba(0, 0, 0, .6); c.drawRect(x - 1, y - 1, x + w + 1, y + 3, pf)
+            val bh = if (e is Bld) 3.5f else 2.5f
+            pf.color = rgba(20, 12, 6, .78); rf.set(x - 1.2f, y - 1.2f, x + w + 1.2f, y + bh + 1.2f); c.drawRoundRect(rf, 1.6f, 1.6f, pf)
             val f = clamp(e.hp / e.maxhp, 0.0, 1.0).toFloat()
-            pf.color = if (f > 0.5) 0xff55cc33.toInt() else if (f > 0.25) 0xffeecc33.toInt() else 0xffee4433.toInt()
-            c.drawRect(x, y, x + w * f, y + 2, pf)
-            if (e is Bld && !e.built) { pf.color = 0xffe8b84a.toInt(); c.drawRect(x, y + 4, x + w * (e.progress / BLD[e.type].time).toFloat(), y + 6, pf) }
+            pf.color = if (e.team != 0) 0xffe0503c.toInt() else if (f > 0.5) 0xff6ad23e.toInt() else if (f > 0.25) 0xffeec23a.toInt() else 0xffee4433.toInt()
+            c.drawRect(x, y, x + w * f, y + bh, pf)
+            pf.color = rgba(255, 255, 255, .28); c.drawRect(x, y, x + w * f, y + bh * 0.4f, pf)
+            if (e is Bld && !e.built) { pf.color = 0xffe8b84a.toInt(); c.drawRect(x, y + bh + 2, x + w * (e.progress / BLD[e.type].time).toFloat(), y + bh + 4, pf) }
         }
         // снаряды
         for (p in G.proj) {
@@ -575,7 +599,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         }
         fogBmp?.let { mc.drawBitmap(it, null, RectF(0f, 0f, S, S), Paint(Paint.FILTER_BITMAP_FLAG)) }
         val v = G.viewRect()
-        val st = Paint().apply { style = Paint.Style.STROKE; color = Color.WHITE; strokeWidth = 1f }
+        val st = Paint().apply { style = Paint.Style.STROKE; color = 0xffffe39a.toInt(); strokeWidth = 1.2f }
         mc.drawRect((v[0] / TILE * s).toFloat(), (v[1] / TILE * s).toFloat(), (v[2] / TILE * s).toFloat(), (v[3] / TILE * s).toFloat(), st)
         G.ping?.let { pg ->
             st.color = 0xffff4030.toInt(); st.strokeWidth = 2f; st.isAntiAlias = true
@@ -697,17 +721,31 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
 /** Мини-карта: показывает кадр, который готовит GameView, тап переносит камеру. */
 @SuppressLint("ViewConstructor")
 class MiniView(ctx: Context, val gv: GameView) : View(ctx) {
-    private val p = Paint()
-    private val dst = Rect()
-    private val border = Paint().apply { color = 0xff8a6a3a.toInt(); style = Paint.Style.STROKE }
+    private val p = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val dst = RectF()
+    private val pf = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ps = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val clip = Path()
+    private val rf = RectF()
 
     override fun onDraw(c: Canvas) {
-        val b = (2 * gv.dens)
-        c.drawColor(Color.BLACK)
-        dst.set(b.toInt(), b.toInt(), width - b.toInt(), height - b.toInt())
+        val d = gv.dens
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val r = 8 * d
+        // рамка: тёмное дерево, золотой кант
+        pf.color = 0xff1a110a.toInt(); rf.set(0f, 0f, w, h); c.drawRoundRect(rf, r, r, pf)
+        val b = 4 * d
+        dst.set(b, b, w - b, h - b)
+        clip.reset(); clip.addRoundRect(dst, r * 0.5f, r * 0.5f, Path.Direction.CW)
+        c.save(); c.clipPath(clip)
+        pf.color = 0xff1e1810.toInt(); c.drawRect(dst, pf)
         c.drawBitmap(gv.mini, null, dst, p)
-        border.strokeWidth = b
-        c.drawRect(b / 2, b / 2, width - b / 2, height - b / 2, border)
+        c.restore()
+        ps.strokeWidth = 1.6f * d; ps.color = 0xffd9a84a.toInt()
+        rf.set(ps.strokeWidth / 2, ps.strokeWidth / 2, w - ps.strokeWidth / 2, h - ps.strokeWidth / 2); c.drawRoundRect(rf, r, r, ps)
+        ps.strokeWidth = 1f * d; ps.color = 0x88ffe39a.toInt()
+        c.drawRoundRect(dst, r * 0.5f, r * 0.5f, ps)
     }
 
     @SuppressLint("ClickableViewAccessibility")

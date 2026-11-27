@@ -10,6 +10,10 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.StateListDrawable
+import android.graphics.LinearGradient
+import android.graphics.Shader
+import android.os.SystemClock
 import android.os.Build
 import android.os.Bundle
 import android.text.Html
@@ -40,6 +44,8 @@ private const val GOLDTXT = 0xffffd77a.toInt()
 private const val BROWN = 0xff5a3f22.toInt()
 private const val BORDER = 0xffb08a50.toInt()
 private const val DARK = 0xff3d2a17.toInt()
+private const val GILT = 0xffd9a84a.toInt()
+private const val GOLD_L = 0xffffe39a.toInt()
 
 /** Вся игра — нативное Android-приложение на Kotlin: поле боя на Canvas, интерфейс из обычных View. */
 class MainActivity : Activity(), Host, Choreographer.FrameCallback {
@@ -88,6 +94,30 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         setColor(bg); if (bw > 0) setStroke(dp(bw), border); cornerRadius = dp(radius).toFloat()
     }
 
+    private fun grad(top: Int, bot: Int, r: Float) = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, bot)).apply { cornerRadius = dp(r).toFloat() }
+
+    /** кнопка «дерево с золотым кантом»; при нажатии светлеет */
+    private fun woodBtn(r: Float = 8f, on: Boolean = false): Drawable {
+        fun layer(top: Int, bot: Int) = LayerDrawable(arrayOf(
+            box(0xff120b05.toInt(), 0, r, 0f),
+            grad(top, bot, r - 1).apply { setStroke(dp(1.5f), if (on) GOLD_L else GILT) },
+            box(Color.TRANSPARENT, 0x30ffffff, r - 2.5f, 1f),
+        )).apply { setLayerInset(1, dp(1), dp(1), dp(1), dp(1)); setLayerInset(2, dp(3), dp(3), dp(3), dp(3)) }
+        val normal = if (on) layer(0xffe8be62.toInt(), 0xffa8772e.toInt()) else layer(0xff74512b.toInt(), 0xff3b2613.toInt())
+        val pressed = if (on) layer(0xfff6d488.toInt(), 0xffc89848.toInt()) else layer(0xffa07040.toInt(), 0xff5e3d1e.toInt())
+        return StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), pressed)
+            addState(intArrayOf(), normal)
+        }
+    }
+
+    /** панель: тёмное дерево, золотая рамка и тонкий внутренний кант */
+    private fun panelBg(r: Float = 10f, top: Int = 0xf2402a16.toInt(), bot: Int = 0xf222160b.toInt()): Drawable = LayerDrawable(arrayOf(
+        box(0xff0e0905.toInt(), 0, r, 0f),
+        grad(top, bot, r - 1).apply { setStroke(dp(2f), GILT) },
+        box(Color.TRANSPARENT, 0x55ffe39a, r - 4, 1f),
+    )).apply { setLayerInset(1, dp(1), dp(1), dp(1), dp(1)); setLayerInset(2, dp(5), dp(5), dp(5), dp(5)) }
+
     private fun tv(text: CharSequence, size: Float, color: Int = CREAM, bold: Boolean = false): TextView = TextView(this).apply {
         this.text = text
         setTextSize(TypedValue.COMPLEX_UNIT_DIP, size)
@@ -117,12 +147,50 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         root.setBackgroundColor(Color.BLACK)
         setContentView(root)
         hideBars()
+        root.post { hideBars() }
         buildMenu()
+        buildSplash()
         Thread {
             val s = Sprites(assets)
             val a = try { Sfx(this) } catch (e: Exception) { null }
             runOnUiThread { onLoaded(s, a) }
         }.start()
+    }
+
+    private lateinit var splash: View
+    private val splashT0 = SystemClock.uptimeMillis()
+
+    /** заставка бренда: ARGEDA — сделаем мир лучше */
+    private fun buildSplash() {
+        val f = FrameLayout(this)
+        f.background = GradientDrawable().apply {
+            gradientType = GradientDrawable.RADIAL_GRADIENT
+            colors = intArrayOf(0xff3a2612.toInt(), 0xff0c0703.toInt())
+            gradientRadius = maxOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels) * 0.55f
+        }
+        f.isClickable = true
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+        val logo = tv("ARGEDA", 46f, GOLD_L, true).apply {
+            letterSpacing = 0.32f; gravity = Gravity.CENTER
+            setShadowLayer(dp(10).toFloat(), 0f, 0f, 0xaaffa030.toInt())
+        }
+        col.addView(logo)
+        col.addView(View(this).apply { background = grad(0x00d9a84a, 0x00d9a84a, 0f).apply {
+            orientation = GradientDrawable.Orientation.LEFT_RIGHT; colors = intArrayOf(0x00d9a84a, GILT, 0x00d9a84a)
+        } }, LinearLayout.LayoutParams(dp(220), dp(2)).apply { topMargin = dp(10); bottomMargin = dp(10) })
+        col.addView(tv("сделаем мир лучше", 19f, CREAM).apply { setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.08f; alpha = 0.9f })
+        f.addView(col, lp(WC, WC, Gravity.CENTER))
+        col.alpha = 0f; col.scaleX = 0.92f; col.scaleY = 0.92f
+        col.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(900).start()
+        splash = f
+        root.addView(f, lp(MP, MP))
+    }
+
+    private fun hideSplash() {
+        val wait = (2200 - (SystemClock.uptimeMillis() - splashT0)).coerceAtLeast(0)
+        root.postDelayed({
+            splash.animate().alpha(0f).setDuration(600).withEndAction { root.removeView(splash) }.start()
+        }, wait)
     }
 
     private fun onLoaded(s: Sprites, a: Sfx?) {
@@ -139,14 +207,26 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         v.onTouchStart = null
         startBtn.text = "Начать битву"
         startBtn.alpha = 1f
+        for (t in intArrayOf(U_PIKE, U_MUSKET, U_CAV, U_CANNON)) menuIcons.addView(ImageView(this).apply { setImageBitmap(s.unitIcons[t]) },
+            LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(4); marginEnd = dp(4) })
         root.setOnApplyWindowInsetsListener { _, ins ->
-            if (Build.VERSION.SDK_INT >= 28) {
+            // интерфейс не должен уходить под вырез экрана и системные кнопки, если они видны
+            var l = 0
+            var t = 0
+            var r = 0
+            var b = 0
+            if (Build.VERSION.SDK_INT >= 30) {
+                val i = ins.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                l = i.left; t = i.top; r = i.right; b = i.bottom
+            } else if (Build.VERSION.SDK_INT >= 28) {
                 val c = ins.displayCutout
-                hud.setPadding(c?.safeInsetLeft ?: 0, 0, c?.safeInsetRight ?: 0, 0)
+                l = c?.safeInsetLeft ?: 0; r = c?.safeInsetRight ?: 0
             }
+            hud.setPadding(l, t, r, b)
             ins
         }
         root.requestApplyInsets()
+        hideSplash()
         // для проверки на эмуляторе: am start ... --ei start 1 --ez autopilot true --ei speed 3
         val it = intent
         if (it != null && it.hasExtra("start")) {
@@ -157,7 +237,20 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 g.speed = it.getIntExtra("speed", 1).coerceIn(1, 3)
                 if (it.getBooleanExtra("autopilot", false)) { g.autopilot(); autoCam = true }
             }
-        }
+        } else startDemo()
+    }
+
+    /** за меню идёт живое сражение двух ИИ */
+    private var demo = false
+
+    private fun startDemo() {
+        val v = gv ?: return
+        val g = Game(64, 1, true, this, v.vwDp, v.vhDp)
+        g.camZ = 1.05; g.clampCam()
+        demo = true; autoCam = true; autoCamT = 0.0
+        g.speed = 2
+        v.game = g
+        startLoop()
     }
 
     private var autoCam = false
@@ -179,6 +272,11 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        hideBars()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideBars()
@@ -187,7 +285,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     override fun onPause() {
         super.onPause()
         val g = G
-        if (g != null && !g.paused && !g.over) togglePause()
+        if (g != null && !demo && !g.paused && !g.over) togglePause()
     }
 
     override fun onDestroy() {
@@ -204,6 +302,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     private fun gameBack(): Boolean {
         val g = G ?: return false
+        if (demo) return false
         if (g.over) { toMenu(); return true }
         if (g.placing != null) { g.placing = null; g.uiDirty = true; return true }
         if (g.amove) { g.amove = false; g.uiDirty = true; return true }
@@ -222,20 +321,22 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         val c = LinearLayout(this)
         c.orientation = LinearLayout.VERTICAL
         c.gravity = Gravity.CENTER_HORIZONTAL
-        c.background = LayerDrawable(arrayOf(box(0xff2b1d12.toInt(), BORDER, 10f, 3f), box(Color.TRANSPARENT, BORDER, 8f, 1f))).apply {
-            setLayerInset(1, dp(4), dp(4), dp(4), dp(4))
-        }
-        c.setPadding(dp(22), dp(16), dp(22), dp(16))
+        c.background = panelBg(12f, 0xf03a2714.toInt(), 0xf01e1309.toInt())
+        c.setPadding(dp(24), dp(18), dp(24), dp(16))
         c.elevation = dp(10).toFloat()
         val w = min(dp(maxW), resources.displayMetrics.widthPixels - dp(24))
         c.layoutParams = FrameLayout.LayoutParams(w, WC, Gravity.CENTER)
         return c
     }
 
-    private fun screen(c: LinearLayout): View {
+    private fun screen(c: LinearLayout, see: Boolean = false): View {
         val s = ScrollView(this)
         s.isFillViewport = true
-        s.background = screenBg()
+        s.background = if (!see) screenBg() else GradientDrawable().apply {
+            gradientType = GradientDrawable.RADIAL_GRADIENT
+            colors = intArrayOf(0x55000000, 0x88100a04.toInt(), 0xdd0b0703.toInt())
+            gradientRadius = maxOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels) * 0.62f
+        }
         s.isClickable = true
         val wrap = FrameLayout(this)
         wrap.setPadding(dp(12), dp(12), dp(12), dp(12))
@@ -248,26 +349,32 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         val bg = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xffa8352b.toInt(), 0xff6e1d16.toInt())).apply {
             setStroke(dp(2), 0xffe8b84a.toInt()); cornerRadius = dp(8).toFloat()
         }
-        return btn(text, 19f, bg, 12, 12, true, 0xfffff3d6.toInt(), click).apply {
+        val st = StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xffc8483a.toInt(), 0xff8a281e.toInt())).apply {
+                setStroke(dp(2), GOLD_L); cornerRadius = dp(8).toFloat() })
+            addState(intArrayOf(), bg)
+        }
+        return btn(text, 19f, st, 12, 12, true, 0xfffff3d6.toInt(), click).apply {
+            letterSpacing = 0.04f; setShadowLayer(dp(2).toFloat(), 0f, dp(1).toFloat(), 0xaa000000.toInt())
             layoutParams = LinearLayout.LayoutParams(MP, WC).apply { topMargin = dp(12) }
         }
     }
 
-    private fun midBtn(text: String, click: () -> Unit) = btn(text, 15f, box(BROWN, BORDER, 8f), 10, 10, click = click).apply {
+    private fun midBtn(text: String, click: () -> Unit) = btn(text, 15f, woodBtn(), 10, 10, click = click).apply {
         layoutParams = LinearLayout.LayoutParams(MP, WC).apply { topMargin = dp(10) }
     }
 
     private fun seg(labels: Array<String>, on: Int, pick: (Int) -> Unit): LinearLayout {
         val s = LinearLayout(this)
         s.orientation = LinearLayout.HORIZONTAL
-        s.background = box(DARK, BORDER, 8f)
+        s.background = box(DARK, GILT, 8f, 1.5f)
         s.outlineProvider = ViewOutlineProvider.BACKGROUND
         s.clipToOutline = true
         s.setPadding(dp(1), dp(1), dp(1), dp(1))
         val bs = ArrayList<TextView>()
         fun paint(k: Int) {
             bs.forEachIndexed { i, b ->
-                b.setBackgroundColor(if (i == k) BORDER else DARK)
+                b.background = if (i == k) grad(0xffeec46a.toInt(), 0xffb88a3c.toInt(), 0f) else grad(0xff3e2a16.toInt(), 0xff2a1c0e.toInt(), 0f)
                 b.setTextColor(if (i == k) 0xff1d140b.toInt() else CREAM)
                 b.typeface = if (i == k) serifB else serif
             }
@@ -298,12 +405,17 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     private fun buildMenu() {
         val c = card(560)
-        c.addView(tv("Порох и Знамёна", 34f, GOLDTXT, true).apply {
-            letterSpacing = 0.06f; setShadowLayer(0.1f, 0f, dp(2).toFloat(), 0xff6a3a10.toInt()); gravity = Gravity.CENTER
+        c.addView(tv("Порох и Знамёна", 36f, GOLDTXT, true).apply {
+            letterSpacing = 0.05f; gravity = Gravity.CENTER
+            setShadowLayer(dp(3).toFloat(), 0f, dp(2).toFloat(), 0xff3a1c05.toInt())
+            paint.shader = LinearGradient(0f, 0f, 0f, textSize * 1.1f, intArrayOf(0xfffff0b8.toInt(), 0xffffd77a.toInt(), 0xffc8892e.toInt()), null, Shader.TileMode.CLAMP)
         })
+        c.addView(ornament(), LinearLayout.LayoutParams(MP, WC).apply { topMargin = dp(6); bottomMargin = dp(2) })
         c.addView(tv("Стратегия эпохи пик и мушкетов", 16f).apply {
-            setTypeface(serif, Typeface.ITALIC); alpha = 0.8f; setPadding(0, dp(4), 0, dp(12))
+            setTypeface(serif, Typeface.ITALIC); alpha = 0.85f; setPadding(0, dp(2), 0, dp(6))
         })
+        menuIcons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        c.addView(menuIcons, LinearLayout.LayoutParams(WC, WC).apply { bottomMargin = dp(4) })
         c.addView(row("Противник", seg(arrayOf("Лёгкий", "Обычный", "Трудный"), 1) { optDiff = it }))
         c.addView(row("Карта", seg(arrayOf("Малая", "Средняя", "Большая"), 1) { optSize = intArrayOf(64, 80, 100)[it] }))
         startBtn = bigBtn("Загрузка…") { startGame() }
@@ -327,13 +439,32 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             alpha = 0.75f; setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0)
         })
         c.addView(help, LinearLayout.LayoutParams(MP, WC))
-        menu = screen(c)
+        c.addView(tv("ARGEDA — сделаем мир лучше", 12.5f, GILT).apply {
+            setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.06f; alpha = 0.85f; setPadding(0, dp(8), 0, 0)
+        })
+        menu = screen(c, true)
         root.addView(menu, lp(MP, MP))
+    }
+
+    private lateinit var menuIcons: LinearLayout
+
+    /** золотой орнамент-разделитель: ——— ⚔ ——— */
+    private fun ornament(): LinearLayout {
+        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        fun line(l2r: Boolean) = View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                if (l2r) intArrayOf(0x00d9a84a, GILT) else intArrayOf(GILT, 0x00d9a84a))
+        }
+        r.addView(line(true), LinearLayout.LayoutParams(0, dp(1.5f), 1f))
+        r.addView(tv("⚔", 16f, GILT).apply { setPadding(dp(10), 0, dp(10), 0) })
+        r.addView(line(false), LinearLayout.LayoutParams(0, dp(1.5f), 1f))
+        return r
     }
 
     private fun buildPause(): View {
         val c = card(380)
-        c.addView(tv("Пауза", 24f, GOLDTXT, true).apply { setPadding(0, 0, 0, dp(10)) })
+        c.addView(tv("Пауза", 26f, GOLDTXT, true).apply { setPadding(0, 0, 0, dp(6)) })
+        c.addView(ornament(), LinearLayout.LayoutParams(MP, WC).apply { bottomMargin = dp(4) })
         c.addView(bigBtn("Продолжить") { togglePause() })
         soundBtn = midBtn("Звук: вкл") {
             soundOn = !soundOn; sfx?.on = soundOn; soundBtn.text = "Звук: " + if (soundOn) "вкл" else "выкл"
@@ -345,8 +476,9 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     private fun buildEnd(): View {
         val c = card(380)
-        endTitle = tv("", 24f, GOLDTXT, true).apply { setPadding(0, 0, 0, dp(10)) }
+        endTitle = tv("", 28f, GOLDTXT, true).apply { setPadding(0, 0, 0, dp(6)) }
         c.addView(endTitle)
+        c.addView(ornament(), LinearLayout.LayoutParams(MP, WC).apply { bottomMargin = dp(6) })
         endStats = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         c.addView(endStats)
         c.addView(bigBtn("В меню") { toMenu() })
@@ -360,31 +492,36 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         val top = LinearLayout(this)
         top.orientation = LinearLayout.HORIZONTAL
         top.gravity = Gravity.CENTER_VERTICAL
-        top.setPadding(dp(8), 0, dp(8), dp(2))
+        top.setPadding(dp(6), 0, dp(6), dp(3))
         top.background = LayerDrawable(arrayOf(
-            GradientDrawable().apply { setColor(0xff8a6a3a.toInt()) },
-            GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xee2b1d12.toInt(), 0xbb2b1d12.toInt())),
-        )).apply { setLayerInset(1, 0, 0, 0, dp(2)) }
-        val resRow = LinearLayout(this)
+            GradientDrawable().apply { setColor(0xff0e0905.toInt()) },
+            GradientDrawable().apply { setColor(GILT) },
+            GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xf5241709.toInt(), 0xe8382412.toInt())),
+        )).apply { setLayerInset(1, 0, 0, 0, dp(1)); setLayerInset(2, 0, 0, 0, dp(2.5f)) }
+        val resRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         for (i in 0 until 5) {
-            val t = tv("", 15f).apply { maxLines = 1 }
+            val t = tv("", 14.5f, CREAM, true).apply {
+                maxLines = 1; gravity = Gravity.CENTER_VERTICAL
+                background = box(0x66000000, 0x55d9a84a, 12f, 1f); setPadding(dp(8), dp(3), dp(10), dp(3))
+            }
             resTv[i] = t
-            resRow.addView(t, LinearLayout.LayoutParams(WC, WC).apply { marginEnd = dp(12) })
+            resRow.addView(t, LinearLayout.LayoutParams(WC, WC).apply { marginEnd = dp(6) })
         }
         top.addView(resRow, LinearLayout.LayoutParams(0, WC, 1f))
-        fun tb(t: String, click: () -> Unit) = btn(t, 14f, box(BROWN, BORDER, 6f), 0, 6, click = click).apply {
-            minWidth = dp(40)
+        fun tb(t: String, click: () -> Unit) = btn(t, 14f, woodBtn(6f), 0, 8, true, click = click).apply {
+            minWidth = dp(44)
         }
         speedBtn = tb("×1") { G?.let { it.speed = if (it.speed >= 3) 1 else it.speed + 1; syncHudButtons(it) } }
-        top.addView(speedBtn, LinearLayout.LayoutParams(WC, dp(26)))
-        top.addView(tb("❚❚") { togglePause() }, LinearLayout.LayoutParams(WC, dp(26)).apply { marginStart = dp(6) })
-        hud.addView(top, lp(MP, dp(36), Gravity.TOP))
+        top.addView(speedBtn, LinearLayout.LayoutParams(WC, dp(28)))
+        top.addView(tb("❚❚") { togglePause() }, LinearLayout.LayoutParams(WC, dp(28)).apply { marginStart = dp(6) })
+        hud.addView(top, lp(MP, dp(38), Gravity.TOP))
 
         // быстрые кнопки справа
         val quick = LinearLayout(this)
         quick.orientation = LinearLayout.VERTICAL
-        fun qb(t: String, click: () -> Unit) = btn(t, 13f, box(0xd93d2a17.toInt(), BORDER, 8f), 7, 9, click = click).apply {
+        fun qb(t: String, click: () -> Unit) = btn(t, 13f, woodBtn(), 8, 10, click = click).apply {
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            setShadowLayer(dp(1).toFloat(), 0f, dp(1).toFloat(), 0xaa000000.toInt())
         }
         quick.addView(qb("⚔ Армия") { quickArmy() }, LinearLayout.LayoutParams(MP, WC))
         quick.addView(qb("⛏ Без дела") { quickIdle() }, LinearLayout.LayoutParams(MP, WC).apply { topMargin = dp(6) })
@@ -395,50 +532,61 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         // мини-карта
         val mv = MiniView(this, gv!!)
         miniV = mv
-        hud.addView(mv, lp(dp(112), dp(112), Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(4); bottomMargin = dp(4) })
+        hud.addView(mv, lp(dp(108), dp(108), Gravity.BOTTOM or Gravity.START).apply { leftMargin = dp(4); bottomMargin = dp(4) })
 
         // нижняя панель
         val panel = LinearLayout(this)
         panel.orientation = LinearLayout.HORIZONTAL
-        panel.background = box(0xe62b1d12.toInt(), 0xff8a6a3a.toInt(), 8f, 2f)
-        panel.setPadding(dp(6), dp(6), dp(6), dp(6))
-        info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        panel.addView(info, LinearLayout.LayoutParams(dp(190), MP))
+        panel.background = panelBg(10f)
+        panel.setPadding(dp(8), dp(8), dp(8), dp(8))
+        portrait = FrameLayout(this).apply { background = LayerDrawable(arrayOf(
+            box(0xff120b05.toInt(), GILT, 6f, 1.5f),
+            GradientDrawable().apply { gradientType = GradientDrawable.RADIAL_GRADIENT; colors = intArrayOf(0xff5a4024.toInt(), 0xff1c120a.toInt()); gradientRadius = dp(30).toFloat(); cornerRadius = dp(5).toFloat() },
+        )).apply { setLayerInset(1, dp(2), dp(2), dp(2), dp(2)) } }
+        portraitImg = ImageView(this)
+        portrait.addView(portraitImg, lp(dp(46), dp(46), Gravity.CENTER))
+        panel.addView(portrait, LinearLayout.LayoutParams(dp(56), MP).apply { marginEnd = dp(8) })
+        info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+        panel.addView(info, LinearLayout.LayoutParams(dp(176), MP))
         buildInfo()
         val sc = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER }
         acts = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         sc.addView(acts, ViewGroup.LayoutParams(WC, MP))
         panel.addView(sc, LinearLayout.LayoutParams(0, MP, 1f).apply { marginStart = dp(6) })
-        hud.addView(panel, lp(MP, dp(92), Gravity.BOTTOM).apply { leftMargin = dp(122); rightMargin = dp(4); bottomMargin = dp(4) })
+        hud.addView(panel, lp(MP, dp(86), Gravity.BOTTOM).apply { leftMargin = dp(116); rightMargin = dp(4); bottomMargin = dp(4) })
 
         // подтверждение постройки
         val pl = LinearLayout(this)
         pl.orientation = LinearLayout.HORIZONTAL
-        val pbg = { box(BROWN, 0xffe8b84a.toInt(), 8f, 2f) }
+        val pbg = { woodBtn(8f) }
         pl.addView(btn("✓ Строить здесь", 15f, pbg(), 10, 16) { G?.confirmPlace() })
         pl.addView(btn("✕ Отмена", 15f, pbg(), 10, 16) { G?.let { it.placing = null; it.uiDirty = true } },
             LinearLayout.LayoutParams(WC, WC).apply { marginStart = dp(10) })
         place = pl
-        hud.addView(pl, lp(WC, WC, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(104) })
+        hud.addView(pl, lp(WC, WC, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(98) })
 
         toastTv = tv("", 14f).apply {
-            background = box(0xaa000000.toInt(), 0, 14f, 0f); setPadding(dp(14), dp(6), dp(14), dp(6)); alpha = 0f; maxLines = 1
+            background = box(0xd8201409.toInt(), GILT, 16f, 1f); setPadding(dp(16), dp(7), dp(16), dp(7)); alpha = 0f; maxLines = 1
+            setTextColor(GOLD_L); elevation = dp(4).toFloat()
         }
         hud.addView(toastTv, lp(WC, WC, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(44) })
     }
 
     private fun syncHudButtons(g: Game) {
-        boxBtn.background = if (g.boxMode) box(BORDER, BORDER, 8f) else box(0xd93d2a17.toInt(), BORDER, 8f)
+        if (boxOn != g.boxMode) { boxOn = g.boxMode; boxBtn.background = woodBtn(8f, g.boxMode) }
         boxBtn.setTextColor(if (g.boxMode) 0xff1d140b.toInt() else CREAM)
         place.visibility = if (g.placing != null) View.VISIBLE else View.GONE
         speedBtn.text = "×" + g.speed
     }
+
+    private var boxOn = false
 
     private fun updateTop(g: Game) {
         val R = g.res[0]
         for (r in 0..3) resTv[r]!!.text = RICON[r] + " " + floor(R[r]).toInt()
         resTv[4]!!.text = "👥 " + g.pop[0] + "/" + g.cap[0]
         resTv[4]!!.setTextColor(if (g.pop[0] >= g.cap[0]) 0xffff8a7a.toInt() else CREAM)
+        for (r in 0..3) resTv[r]!!.setTextColor(if (R[r] < 20) 0xffffb08a.toInt() else CREAM)
     }
 
     // полоска (здоровье, прогресс)
@@ -447,10 +595,19 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         override fun onDraw(c: Canvas) {
             val r = height / 2f
             p.color = bg; c.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), r, r, p)
-            p.color = fg; c.drawRect(0f, 0f, width * frac.coerceIn(0f, 1f), height.toFloat(), p)
+            val w = width * frac.coerceIn(0f, 1f)
+            if (w > 0) {
+                c.save(); c.clipRect(0f, 0f, w, height.toFloat())
+                p.color = fg; c.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), r, r, p)
+                p.color = 0x40ffffff; c.drawRect(0f, 0f, width.toFloat(), height * 0.4f, p)
+                c.restore()
+            }
         }
     }
 
+    private lateinit var portrait: FrameLayout
+    private lateinit var portraitImg: ImageView
+    private var portraitBmp: Bitmap? = null
     private lateinit var iName: TextView
     private lateinit var iBar1: Bar
     private lateinit var iL1: TextView
@@ -459,9 +616,9 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private lateinit var iL3: TextView
 
     private fun buildInfo() {
-        iName = tv("", 14f, 0xffffe2a0.toInt(), true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-        iBar1 = Bar(this, 1f, 0xff551111.toInt(), 0xff55cc33.toInt())
-        iBar2 = Bar(this, 0f, 0xff551111.toInt(), 0xffe8b84a.toInt())
+        iName = tv("", 15f, GOLD_L, true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        iBar1 = Bar(this, 1f, 0xff2a120c.toInt(), 0xff62c43a.toInt())
+        iBar2 = Bar(this, 0f, 0xff2a1a0c.toInt(), 0xffe8b84a.toInt())
         fun line() = tv("", 12.5f).apply { setLineSpacing(0f, 1.15f) }
         iL1 = line(); iL2 = line(); iL3 = line()
         info.addView(iName)
@@ -473,7 +630,12 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     }
 
     /** name, полоска здоровья (или <0), строка, полоска очереди (или <0), ещё две строки */
-    private fun setInfo(name: String, hp: Double, l1: CharSequence?, q: Double, l2: CharSequence? = null, l3: CharSequence? = null) {
+    private fun setInfo(icon: Bitmap?, name: String, hp: Double, l1: CharSequence?, q: Double, l2: CharSequence? = null, l3: CharSequence? = null) {
+        if (icon !== portraitBmp) {
+            portraitBmp = icon
+            portraitImg.setImageBitmap(icon)
+            portrait.visibility = if (icon != null) View.VISIBLE else View.GONE
+        }
         if (iName.text.toString() != name) iName.text = name
         fun bar(b: Bar, f: Double) {
             val vis = if (f >= 0) View.VISIBLE else View.GONE
@@ -503,9 +665,9 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
         val pl = g.placing
         if (pl != null) {
-            setInfo(BLD[pl.type].name, -1.0, BLD[pl.type].desc, -1.0, "Нажмите на карту, чтобы выбрать место")
+            setInfo(spr!!.bldIcons[pl.type], BLD[pl.type].name, -1.0, BLD[pl.type].desc, -1.0, "Нажмите на карту, чтобы выбрать место")
         } else if (sel.isEmpty()) {
-            setInfo("Ничего не выбрано", -1.0, "Тап по своему отряду или зданию. Удерживайте палец, чтобы выделить рамкой.", -1.0)
+            setInfo(null, "Ничего не выбрано", -1.0, "Тап по своему отряду или зданию. Удерживайте палец, чтобы выделить рамкой.", -1.0)
         } else if (sel.size == 1) {
             val e = sel[0]
             if (e is Unt) {
@@ -514,21 +676,23 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 val st = if (t != null && t.type == TASK_BUILD) "Строит"
                 else if (t != null) "Добывает: " + RNAME[t.res].lowercase() + (if (e.carry > 0) " (${e.carry})" else "")
                 else if (e.target != null) "В бою" else if (e.goal != null) "В пути" else "Ожидает"
-                setInfo(d.name + if (e.team != 0) " (враг)" else "", e.hp / e.maxhp, "${ceil(e.hp).toInt()}/${e.maxhp.toInt()} · атака ${d.atk.toInt()}", -1.0, if (e.team != 0) d.desc else st)
+                setInfo(spr!!.unitIcons[e.type], d.name + if (e.team != 0) " (враг)" else "", e.hp / e.maxhp, "${ceil(e.hp).toInt()}/${e.maxhp.toInt()} · атака ${d.atk.toInt()}", -1.0, if (e.team != 0) d.desc else st)
             } else if (e is Bld) {
                 val d = BLD[e.type]
                 val nm = d.name + if (e.team != 0) " (враг)" else ""
                 val hpT = "${ceil(e.hp).toInt()}/${e.maxhp.toInt()}"
-                if (!e.built) setInfo(nm, e.hp / e.maxhp, hpT, -1.0, "Строится: ${floor(e.progress / d.time * 100).toInt()}%")
-                else if (e.queue.isNotEmpty()) setInfo(nm, e.hp / e.maxhp, hpT, e.qt / UNIT[e.queue[0]].time, if (e.popBlocked) "Нужны дома!" else "Обучение: " + UNIT[e.queue[0]].name)
-                else setInfo(nm, e.hp / e.maxhp, hpT, -1.0, d.desc)
+                val ic = spr!!.bldIcons[e.type]
+                if (!e.built) setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, "Строится: ${floor(e.progress / d.time * 100).toInt()}%")
+                else if (e.queue.isNotEmpty()) setInfo(ic, nm, e.hp / e.maxhp, hpT, e.qt / UNIT[e.queue[0]].time, if (e.popBlocked) "Нужны дома!" else "Обучение: " + UNIT[e.queue[0]].name)
+                else setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, d.desc)
             } else if (e is Mine) {
-                setInfo(if (e.res == GOLD) "Золотая жила" else "Каменоломня", -1.0, "Осталось: ${e.amount}", -1.0, "Отправьте сюда крестьян")
+                setInfo(null, if (e.res == GOLD) "Золотая жила" else "Каменоломня", -1.0, "Осталось: ${e.amount}", -1.0, "Отправьте сюда крестьян")
             }
         } else {
             val cnt = LinkedHashMap<Int, Int>()
             for (e in sel) if (e is Unt) cnt[e.type] = (cnt[e.type] ?: 0) + 1
-            setInfo("Отряд: ${sel.size}", -1.0, cnt.entries.joinToString("   ") { UNIT[it.key].name + " ×" + it.value }, -1.0, if (g.amove) "Натиск: тап по карте" else null)
+            val top = cnt.maxByOrNull { it.value }?.key
+            setInfo(if (top != null) spr!!.unitIcons[top] else null, "Отряд: ${sel.size}", -1.0, cnt.entries.joinToString("   ") { UNIT[it.key].name + " ×" + it.value }, -1.0, if (g.amove) "Натиск: тап по карте" else null)
         }
 
         if (sig == uiSig && !g.uiDirty) {
@@ -568,17 +732,19 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         } else if (sel.isNotEmpty()) txtBtn("✕ Снять") { g.sel = ArrayList(); g.amove = false }
     }
 
-    private fun actLp() = LinearLayout.LayoutParams(dp(80), MP).apply { marginEnd = dp(4) }
+    private fun actLp() = LinearLayout.LayoutParams(dp(78), MP).apply { marginEnd = dp(5) }
 
     private fun clickAct(f: () -> Unit) { f(); G?.uiDirty = true }
 
     private fun txtBtn(label: String, f: () -> Unit) {
-        acts.addView(btn(label, 13f, box(BROWN, BORDER, 6f), 2, 2) { clickAct(f) }, actLp())
+        acts.addView(btn(label, 13.5f, woodBtn(7f), 2, 2) { clickAct(f) }.apply {
+            setShadowLayer(dp(1).toFloat(), 0f, dp(1).toFloat(), 0xaa000000.toInt())
+        }, actLp())
     }
 
     private fun actBtn(icon: Bitmap?, name: String, cost: IntArray, badge: Int, f: () -> Unit) {
         val fl = FrameLayout(this)
-        fl.background = box(BROWN, BORDER, 6f)
+        fl.background = woodBtn(7f)
         fl.isClickable = true
         fl.setOnClickListener { clickAct(f) }
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(2), dp(2), dp(2), dp(2)) }
@@ -595,7 +761,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     private fun qItem(icon: Bitmap?, frac: Double, f: () -> Unit) {
         val fl = FrameLayout(this)
-        fl.background = box(DARK, 0xff8a6a3a.toInt(), 6f)
+        fl.background = box(0xff1c120a.toInt(), GILT, 6f, 1f)
         fl.isClickable = true
         fl.setOnClickListener { clickAct(f) }
         fl.addView(ImageView(this).apply { setImageBitmap(icon) }, lp(dp(32), dp(32), Gravity.CENTER))
@@ -644,6 +810,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private fun startGame() {
         val v = gv ?: return
         val g = Game(optSize, optDiff, false, this, v.vwDp, v.vhDp)
+        demo = false; autoCam = false
         v.game = g
         menu.visibility = View.GONE
         hud.visibility = View.VISIBLE
@@ -663,6 +830,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private fun toMenu() {
         gv?.game = null
         pauseM.visibility = View.GONE; endM.visibility = View.GONE; hud.visibility = View.GONE; menu.visibility = View.VISIBLE
+        startDemo()
     }
 
     private var looping = false
@@ -684,6 +852,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     private fun onFrame(dtReal: Double) {
         val g = G ?: return
+        if (demo) { demoCam(g, dtReal); return }
         uiT -= dtReal
         if (uiT <= 0 || g.uiDirty) { uiT = 0.25; updateTop(g); updatePanel(g); syncHudButtons(g) }
         if (autoCam) {
@@ -699,6 +868,31 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         }
         miniT -= dtReal
         if (miniT <= 0) { miniT = 0.3; gv!!.drawMini(g); miniV?.invalidate() }
+    }
+
+    private var camTX = Double.NaN
+    private var camTY = 0.0
+
+    /** камера заставки плавно следит за самым интересным: бой, армия, город */
+    private fun demoCam(g: Game, dt: Double) {
+        autoCamT -= dt
+        if (autoCamT <= 0 || camTX.isNaN()) {
+            autoCamT = 6.0
+            val fight = g.units.filter { it.type != U_PEASANT && it.target != null }
+            val army = g.units.filter { it.type != U_PEASANT }
+            val list = if (fight.isNotEmpty()) fight else if (army.isNotEmpty()) army else g.units
+            if (list.isNotEmpty()) {
+                val pick = list[(rnd() * list.size).toInt().coerceIn(0, list.size - 1)]
+                val near = list.filter { hyp(it.x - pick.x, it.y - pick.y) < 260 }
+                camTX = near.sumOf { it.x } / near.size; camTY = near.sumOf { it.y } / near.size
+            }
+        }
+        if (!camTX.isNaN()) {
+            val cx = g.camX + g.vw / g.camZ / 2
+            val cy = g.camY + g.vh / g.camZ / 2
+            val k = min(1.0, dt * 0.6)
+            g.centerCam(cx + (camTX - cx) * k, cy + (camTY - cy) * k)
+        }
     }
 
     // ------------------------------------------------------------ Host
@@ -717,6 +911,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     override fun sfx(kind: Int, x: Double, y: Double) {
         val s = sfx ?: return
         val g = G ?: return
+        if (demo) return
         var vol = 1.0
         if (!x.isNaN()) {
             val v = g.viewRect()
@@ -732,6 +927,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     override fun ended(win: Boolean) {
         val g = G ?: return
+        if (demo) { root.postDelayed({ if (demo && G === g) startDemo() }, 4000); return }
         endTitle.text = if (win) "Победа!" else "Поражение"
         endStats.removeAllViews()
         val m = (g.time / 60).toInt()
