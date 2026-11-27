@@ -31,6 +31,11 @@ const val CARRY = 10
 val GTIME = doubleArrayOf(0.8, 0.9, 1.1, 1.2)
 const val POP_MAX = 300
 
+// рынок: начальная цена 100 единиц еды, дерева, камня в золоте
+val PRICE0 = doubleArrayOf(100.0, 100.0, 130.0)
+const val PRICE_MIN = 25.0
+const val PRICE_MAX = 400.0
+
 fun cost(food: Int = 0, wood: Int = 0, stone: Int = 0, gold: Int = 0) = intArrayOf(food, wood, stone, gold)
 
 class UDef(
@@ -75,7 +80,7 @@ val BLD = arrayOf(
     BDef("hall", "Ратуша", 3, 3, 2400, cost(wood = 300, stone = 200), 60.0, 9, "Сердце поселения: крестьяне и склад", pop = 15, drop = true, trains = intArrayOf(U_PEASANT), atk = 8.0, range = 200.0, cd = 2.0),
     BDef("house", "Дом", 2, 2, 500, cost(wood = 60), 15.0, 4, "+10 к населению", pop = 10),
     BDef("farm", "Ферма", 3, 3, 400, cost(wood = 80), 18.0, 4, "Даёт еду, до 6 крестьян", farm = true),
-    BDef("store", "Склад", 2, 2, 600, cost(wood = 100), 18.0, 5, "Сюда можно сдавать добычу", drop = true),
+    BDef("store", "Рынок", 2, 2, 600, cost(wood = 100), 18.0, 5, "Торговля ресурсами; сюда сдают добычу", drop = true),
     BDef("barracks", "Казарма", 3, 3, 1300, cost(wood = 150, stone = 50), 35.0, 6, "Пикинёры и мушкетёры", trains = intArrayOf(U_PIKE, U_MUSKET)),
     BDef("stable", "Конюшня", 3, 3, 1200, cost(wood = 200, stone = 50, gold = 50), 40.0, 6, "Рейтары", trains = intArrayOf(U_CAV)),
     BDef("foundry", "Литейня", 3, 3, 1400, cost(wood = 200, stone = 150, gold = 100), 50.0, 6, "Пушки", trains = intArrayOf(U_CANNON)),

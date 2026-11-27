@@ -34,10 +34,12 @@ const val STEP = 1.0 / 30
 private class FieldEntry(val ver: Int, val d: DoubleArray, var used: Double)
 
 /** Весь мир и вся логика игры. Не зависит от Android: можно гонять без экрана (ИИ против ИИ). */
-class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoHost, vw: Double = 800.0, vh: Double = 450.0) {
+/** blank = true: пустой мир без карты и войск, его заполняет загрузка сохранения (Save.kt) */
+class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoHost, vw: Double = 800.0, vh: Double = 450.0,
+           blank: Boolean = false, seed0: Int = -1) {
     val W = size
     val H = size
-    val seed = (rnd() * 1e9).toInt()
+    val seed = if (seed0 >= 0) seed0 else (rnd() * 1e9).toInt()
     val terrain = ByteArray(W * H)
     val wood = IntArray(W * H)
     val occ = IntArray(W * H)
@@ -84,7 +86,12 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     private var uNext = IntArray(4096)
     val ai = arrayOfNulls<AI>(2)
 
-    init {
+    // рынок: цена 100 единиц еды, дерева, камня в золоте (для игрока)
+    val price = doubleArrayOf(PRICE0[FOOD], PRICE0[WOOD], PRICE0[STONE])
+
+    init { if (!blank) newWorld() }
+
+    private fun newWorld() {
         val P = DIFF[diff]
         res[1][FOOD] += P.bonus.toDouble(); res[1][WOOD] += P.bonus.toDouble(); res[1][GOLD] += (P.bonus shr 1).toDouble()
         genMap()
@@ -493,6 +500,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         for (m in markers) m.t += dt
         markers.removeAll { it.t >= 0.8 }
         ping?.let { it.t -= dt; if (it.t <= 0) ping = null }
+        for (r in 0..2) price[r] += (PRICE0[r] - price[r]) * min(1.0, dt * 0.004)
         if (sel.isNotEmpty() && sel.any { it.dead }) sel.removeAll { it.dead }
         fogT -= dt; if (fogT <= 0) { fogT = 0.25; updateFog() }
         aiT -= dt; if (aiT <= 0) { aiT = 1.0; if (ai[1] != null) aiTick(1); if (ai[0] != null) aiTick(0) }
@@ -817,8 +825,32 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         u.carry = 0
     }
 
+    private var repairWarn = -99.0
+
     private fun peasantTask(u: Unt, dt: Double) {
         val t = u.task!!
+        if (t.type == TASK_REPAIR) {
+            val b = t.b!!
+            if (b.dead || b.hp >= b.maxhp) { u.task = null; u.goal = null; return }
+            if (distTo(u, b) <= u.r + 8) {
+                u.goal = null; u.working = true; u.anim += dt
+                if (abs(b.x - u.x) > 1) u.face = if (b.x > u.x) 1 else -1
+                u.dir = dirOf(b.x - u.x, b.y - u.y)
+                val bd = BLD[b.type]
+                val gain = min(b.maxhp - b.hp, b.maxhp * 0.6 * dt / bd.time)
+                // ремонт стоит дерева: полный ремонт — около половины деревянной цены (не меньше 40)
+                val cost = gain / b.maxhp * max(40, bd.cost[WOOD] + bd.cost[STONE] / 2) * 0.5
+                if (res[u.team][WOOD] < cost) {
+                    if (u.team == 0 && time - repairWarn > 8) { repairWarn = time; host.toast("Для ремонта нужно дерево") }
+                    u.task = null; return
+                }
+                res[u.team][WOOD] -= cost; b.hp += gain
+            } else {
+                if (u.goal == null) goalEnt(u, b, 6.0)
+                if (steer(u, dt) && distTo(u, b) > u.r + 8) { t.fail++; if (t.fail > 6) u.task = null }
+            }
+            return
+        }
         if (t.type == TASK_BUILD) {
             val b = t.b!!
             if (b.dead || b.built) { u.task = null; u.goal = null; afterBuild(u, b); return }
@@ -1170,6 +1202,44 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     }
 
     // ============================================================ приказы игрока
+    // ============================================================ рынок, ремонт, снос
+    fun buyPrice(r: Int) = ceil(price[r]).toInt()
+    fun sellPrice(r: Int) = (price[r] * 0.75).toInt()
+    fun hasMarket(team: Int) = blds.any { it.team == team && !it.dead && it.built && it.type == B_STORE }
+
+    /** купить или продать 100 единиц ресурса r за золото; false — не хватает */
+    fun trade(team: Int, r: Int, buy: Boolean): Boolean {
+        val R = res[team]
+        if (buy) {
+            val c = buyPrice(r)
+            if (R[GOLD] < c) return false
+            R[GOLD] -= c.toDouble(); R[r] += 100.0
+            price[r] = min(PRICE_MAX, price[r] * 1.07)
+        } else {
+            if (R[r] < 100) return false
+            R[r] -= 100.0; R[GOLD] += sellPrice(r).toDouble()
+            price[r] = max(PRICE_MIN, price[r] * 0.93)
+        }
+        uiDirty = true
+        return true
+    }
+
+    fun orderRepair(u: Unt, b: Bld) {
+        u.target = null; u.goal = null; u.cmd = CMD_NONE
+        u.task = Task(TASK_REPAIR, WOOD).also { it.b = b }
+    }
+
+    /** снести своё здание: возвращается треть стоимости */
+    fun demolish(b: Bld) {
+        if (b.dead) return
+        val d = BLD[b.type]
+        val k = if (b.built) 0.33 else 0.75
+        for (r in 0..3) res[b.team][r] += Math.round(d.cost[r] * k).toDouble()
+        stats[b.team].lost--
+        kill(b, null)
+        sel.remove(b); uiDirty = true
+    }
+
     fun groupMove(list: List<Unt>, x: Double, y: Double, cmd: Int) {
         if (list.isEmpty()) return
         var cx = 0.0
@@ -1252,6 +1322,10 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             val peas = sel0.filter { it.type == U_PEASANT }
             if (peas.isNotEmpty() && peas.size == sel0.size) {
                 if (!hit.built) { for (u in peas) orderBuild(u, hit); marker(hit.x, hit.y, 0xffe8b84a.toInt()); return }
+                if (hit.hp < hit.maxhp - 1) {
+                    for (u in peas) orderRepair(u, hit); marker(hit.x, hit.y, 0xffe8b84a.toInt())
+                    host.toast("Ремонт: " + BLD[hit.type].name); host.sfx(S_ORDER, Double.NaN, Double.NaN); return
+                }
                 if (hit.type == B_FARM) { for (u in peas) orderGather(u, FOOD, farm = hit); marker(hit.x, hit.y, 0xffe8b84a.toInt()); return }
                 if (BLD[hit.type].drop && peas.any { it.carry > 0 }) {
                     for (u in peas) if (u.carry > 0) {

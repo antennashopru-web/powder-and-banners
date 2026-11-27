@@ -35,6 +35,11 @@ import android.widget.ScrollView
 import android.widget.TableLayout
 import android.widget.TableRow
 import android.widget.TextView
+import org.json.JSONObject
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
@@ -227,6 +232,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         }
         root.requestApplyInsets()
         hideSplash()
+        refreshContinue()
         // для проверки на эмуляторе: am start ... --ei start 1 --ez autopilot true --ei speed 3
         val it = intent
         if (it != null && it.hasExtra("start")) {
@@ -285,6 +291,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     override fun onPause() {
         super.onPause()
         val g = G
+        if (g != null && !demo && !g.over) saveGame()
         if (g != null && !demo && !g.paused && !g.over) togglePause()
     }
 
@@ -421,6 +428,9 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         startBtn = bigBtn("Загрузка…") { startGame() }
         startBtn.alpha = 0.6f
         c.addView(startBtn)
+        contBtn = midBtn("▶ Продолжить") { loadGame() }
+        contBtn.visibility = View.GONE
+        c.addView(contBtn)
         val help = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         c.addView(tv("Как играть", 14f).apply {
             paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG; alpha = 0.85f; setPadding(dp(8), dp(12), dp(8), dp(4)); isClickable = true
@@ -431,7 +441,11 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "<b>Выбор:</b> тап по своему отряду или зданию. Двойной тап выбирает всех таких же на экране. Чтобы выделить рамкой, задержите палец и ведите (или нажмите «Рамка»).",
             "<b>Приказы:</b> тап по земле — идти строем, по врагу — атаковать, по лесу, шахте или ферме — добывать (крестьяне). «Натиск» — идти и бить всех по пути.",
             "<b>Карта:</b> одним пальцем — двигать, двумя — масштаб, тап по мини-карте — перейти.",
-            "<b>Хозяйство:</b> крестьяне рубят лес, ломают камень, моют золото и работают на фермах. Дома дают место для войск, склад сокращает путь с грузом.",
+            "<b>Хозяйство:</b> крестьяне рубят лес, ломают камень, моют золото и работают на фермах. Дома дают место для войск, рынок принимает добычу.",
+            "<b>Рынок:</b> выберите рынок, чтобы купить или продать по 100 еды, дерева или камня за золото. Цены меняются от сделок.",
+            "<b>Ремонт и снос:</b> выберите крестьян и тапните по повреждённому зданию — починят за дерево. У своего здания есть кнопка «Снести» (вернётся треть цены).",
+            "<b>Отряды 1·2·3:</b> выделите войска и нажмите кнопку с номером — отряд запомнится. Потом одно нажатие выбирает его, второе подряд — переносит к нему камеру. Удержание — запомнить заново.",
+            "<b>Сохранение:</b> в паузе есть «Сохранить игру», а при сворачивании игра сохраняется сама. Продолжить можно из главного меню.",
             "<b>Войска:</b> пикинёры держат конницу, мушкетёры бьют залпом издалека, рейтары быстры, пушки рушат здания и строи.",
         )
         for (p in ps) help.addView(tv(html(p), 13.5f).apply { setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0) })
@@ -447,6 +461,37 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     }
 
     private lateinit var menuIcons: LinearLayout
+    private lateinit var contBtn: TextView
+
+    // ------------------------------------------------------------ сохранение
+    private val saveFile get() = File(filesDir, "save.json")
+    private val timeFmt = SimpleDateFormat("d MMM, HH:mm", Locale("ru"))
+
+    private fun refreshContinue() {
+        val f = saveFile
+        if (spr != null && f.exists()) {
+            contBtn.text = "▶ Продолжить битву (" + timeFmt.format(Date(f.lastModified())) + ")"
+            contBtn.visibility = View.VISIBLE
+        } else contBtn.visibility = View.GONE
+    }
+
+    private fun saveGame(): Boolean {
+        val g = G ?: return false
+        if (demo || g.over || g.auto) return false
+        return try {
+            val tmp = File(filesDir, "save.tmp")
+            tmp.writeText(Save.toJson(g).toString())
+            tmp.renameTo(saveFile)
+        } catch (e: Exception) { false }
+    }
+
+    private fun loadGame() {
+        val v = gv ?: return
+        val g = try { Save.fromJson(JSONObject(saveFile.readText()), this, v.vwDp, v.vhDp) } catch (e: Exception) { null }
+        if (g == null) { contBtn.text = "Сохранение повреждено"; return }
+        launch(g)
+        hud.postDelayed({ if (G === g) toast("Игра загружена") }, 400)
+    }
 
     /** золотой орнамент-разделитель: ——— ⚔ ——— */
     private fun ornament(): LinearLayout {
@@ -461,11 +506,17 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         return r
     }
 
+    private lateinit var saveBtn: TextView
+
     private fun buildPause(): View {
         val c = card(380)
         c.addView(tv("Пауза", 26f, GOLDTXT, true).apply { setPadding(0, 0, 0, dp(6)) })
         c.addView(ornament(), LinearLayout.LayoutParams(MP, WC).apply { bottomMargin = dp(4) })
         c.addView(bigBtn("Продолжить") { togglePause() })
+        saveBtn = midBtn("💾 Сохранить игру") {
+            saveBtn.text = if (saveGame()) "✓ Сохранено " + timeFmt.format(Date()) else "Не удалось сохранить"
+        }
+        c.addView(saveBtn)
         soundBtn = midBtn("Звук: вкл") {
             soundOn = !soundOn; sfx?.on = soundOn; soundBtn.text = "Звук: " + if (soundOn) "вкл" else "выкл"
         }
@@ -527,6 +578,15 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         quick.addView(qb("⛏ Без дела") { quickIdle() }, LinearLayout.LayoutParams(MP, WC).apply { topMargin = dp(6) })
         boxBtn = qb("▭ Рамка") { G?.let { it.boxMode = !it.boxMode; it.uiDirty = true; syncHudButtons(it) } }
         quick.addView(boxBtn, LinearLayout.LayoutParams(MP, WC).apply { topMargin = dp(6) })
+        val grow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (k in 0 until 3) {
+            val b = btn("${k + 1}", 15f, woodBtn(8f), 6, 0, true) { groupTap(k) }.apply {
+                setOnLongClickListener { groupSet(k); true }
+            }
+            groupBtns[k] = b
+            grow.addView(b, LinearLayout.LayoutParams(0, dp(36), 1f).apply { if (k > 0) marginStart = dp(5) })
+        }
+        quick.addView(grow, LinearLayout.LayoutParams(MP, WC).apply { topMargin = dp(6) })
         hud.addView(quick, lp(WC, WC, Gravity.TOP or Gravity.END).apply { topMargin = dp(42); marginEnd = dp(6) })
 
         // мини-карта
@@ -657,7 +717,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         if (g.amove) sb.append('A')
         for (e in sel) {
             sb.append(e.id)
-            if (e is Bld) { sb.append(if (e.built) 'b' else 'u'); for (q in e.queue) sb.append(q) }
+            if (e is Bld) { sb.append(if (e.built) 'b' else 'u'); if (e.hp < e.maxhp - 1) sb.append('d'); for (q in e.queue) sb.append(q) }
             sb.append(',')
         }
         sb.append('|'); for (r in 0..3) sb.append(floor(g.res[0][r] / 10).toInt()).append(',')
@@ -674,6 +734,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 val d = UNIT[e.type]
                 val t = e.task
                 val st = if (t != null && t.type == TASK_BUILD) "Строит"
+                else if (t != null && t.type == TASK_REPAIR) "Чинит: " + BLD[t.b!!.type].name.lowercase()
                 else if (t != null) "Добывает: " + RNAME[t.res].lowercase() + (if (e.carry > 0) " (${e.carry})" else "")
                 else if (e.target != null) "В бою" else if (e.goal != null) "В пути" else "Ожидает"
                 setInfo(spr!!.unitIcons[e.type], d.name + if (e.team != 0) " (враг)" else "", e.hp / e.maxhp, "${ceil(e.hp).toInt()}/${e.maxhp.toInt()} · атака ${d.atk.toInt()}", -1.0, if (e.team != 0) d.desc else st)
@@ -684,6 +745,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 val ic = spr!!.bldIcons[e.type]
                 if (!e.built) setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, "Строится: ${floor(e.progress / d.time * 100).toInt()}%")
                 else if (e.queue.isNotEmpty()) setInfo(ic, nm, e.hp / e.maxhp, hpT, e.qt / UNIT[e.queue[0]].time, if (e.popBlocked) "Нужны дома!" else "Обучение: " + UNIT[e.queue[0]].name)
+                else if (e.type == B_STORE && e.team == 0) setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, "Торговля: купить или продать по 100")
                 else setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, d.desc)
             } else if (e is Mine) {
                 setInfo(null, if (e.res == GOLD) "Золотая жила" else "Каменоломня", -1.0, "Осталось: ${e.amount}", -1.0, "Отправьте сюда крестьян")
@@ -712,6 +774,15 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 txtBtn(if (g.amove) "⚔ Натиск…" else "⚔ Натиск") { g.amove = !g.amove }
             }
             txtBtn("■ Стоп") { for (u in g.ownSelUnits()) { u.goal = null; u.target = null; u.task = null; u.cmd = CMD_NONE } }
+            // выбор: все такие же на карте; в смешанном отряде — оставить только один род войск
+            val types = own.map { (it as Unt).type }.distinct()
+            if (types.size == 1) txtBtn("◎ Все\n" + plural(types[0])) {
+                g.sel = ArrayList(g.units.filter { it.team == 0 && !it.dead && it.type == types[0] })
+                toast("Выбрано: ${g.sel.size}")
+            } else for (t in types.sortedBy { FORM_ORDER[it] }) {
+                val n = own.count { (it as Unt).type == t }
+                pickBtn(spr!!.unitIcons[t], "Только", n) { g.sel = ArrayList(own.filter { (it as Unt).type == t }) }
+            }
             txtBtn("✕ Снять") { g.sel = ArrayList(); g.amove = false }
         } else if (own.size == 1 && own[0] is Bld) {
             val b = own[0] as Bld
@@ -728,11 +799,60 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                     if (k < b.queue.size) { val tt = b.queue.removeAt(k); g.pay(0, UNIT[tt].cost, -1.0); if (k == 0) b.qt = 0.0 }
                 } }
             }
+            if (b.built && b.type == B_STORE) {
+                for (r in 0..2) {
+                    tradeBtn("Купить\n100 ${RICON[r]}\n−${g.buyPrice(r)} 💰", g.res[0][GOLD] >= g.buyPrice(r)) {
+                        if (g.trade(0, r, true)) sfx(S_CLICK, Double.NaN, Double.NaN) else toast("Не хватает золота")
+                    }
+                    tradeBtn("Продать\n100 ${RICON[r]}\n+${g.sellPrice(r)} 💰", g.res[0][r] >= 100) {
+                        if (g.trade(0, r, false)) sfx(S_CLICK, Double.NaN, Double.NaN) else toast("Нужно 100: " + RNAME[r].lowercase())
+                    }
+                }
+            }
+            if (b.built && b.hp < b.maxhp - 1) txtBtn("🔧 Чинить") {
+                val peas = g.units.filter { it.team == 0 && !it.dead && it.type == U_PEASANT }
+                    .sortedBy { (if (it.task == null) 0.0 else 1e6) + hyp(it.x - b.x, it.y - b.y) }.take(3)
+                if (peas.isEmpty()) toast("Нет крестьян") else { for (u in peas) g.orderRepair(u, b); toast("Чинят: ${peas.size}") }
+            }
+            txtBtn("🔨 Снести") {
+                val now = SystemClock.uptimeMillis()
+                if (demolishId == b.id && now - demolishT < 2500) { g.demolish(b); demolishId = 0 }
+                else { demolishId = b.id; demolishT = now; toast("Нажмите «Снести» ещё раз для подтверждения") }
+            }
             txtBtn("✕ Снять") { g.sel = ArrayList(); g.amove = false }
         } else if (sel.isNotEmpty()) txtBtn("✕ Снять") { g.sel = ArrayList(); g.amove = false }
     }
 
     private fun actLp() = LinearLayout.LayoutParams(dp(78), MP).apply { marginEnd = dp(5) }
+
+    private var demolishId = 0
+    private var demolishT = 0L
+
+    private fun plural(t: Int) = when (t) {
+        U_PEASANT -> "крестьяне"; U_PIKE -> "пикинёры"; U_MUSKET -> "мушкетёры"; U_CAV -> "рейтары"; else -> "пушки"
+    }
+
+    private fun tradeBtn(label: String, ok: Boolean, f: () -> Unit) {
+        acts.addView(btn(label, 11.5f, woodBtn(7f), 2, 2) { clickAct(f) }.apply {
+            setLineSpacing(0f, 1.05f); alpha = if (ok) 1f else 0.45f
+        }, LinearLayout.LayoutParams(dp(70), MP).apply { marginEnd = dp(5) })
+    }
+
+    /** кнопка-портрет с числом: оставить в выделении только этот род войск */
+    private fun pickBtn(icon: Bitmap?, label: String, n: Int, f: () -> Unit) {
+        val fl = FrameLayout(this)
+        fl.background = woodBtn(7f)
+        fl.isClickable = true
+        fl.setOnClickListener { clickAct(f) }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(2), dp(3), dp(2), dp(2)) }
+        col.addView(ImageView(this).apply { setImageBitmap(icon) }, LinearLayout.LayoutParams(dp(36), dp(36)))
+        col.addView(tv(label, 11f, bold = true).apply { gravity = Gravity.CENTER })
+        fl.addView(col, lp(MP, MP))
+        fl.addView(tv(n.toString(), 11f, 0xff1d140b.toInt(), true).apply {
+            background = box(0xffe8b84a.toInt(), 0, 8f, 0f); setPadding(dp(5), dp(1), dp(5), dp(1))
+        }, lp(WC, WC, Gravity.TOP or Gravity.END).apply { topMargin = dp(2); marginEnd = dp(3) })
+        acts.addView(fl, LinearLayout.LayoutParams(dp(62), MP).apply { marginEnd = dp(5) })
+    }
 
     private fun clickAct(f: () -> Unit) { f(); G?.uiDirty = true }
 
@@ -787,6 +907,46 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         for (u in us) { u.face = fx; u.dir = fd }
     }
 
+    // ------------------------------------------------------------ отряды 1·2·3
+    private val groups = Array(3) { ArrayList<Ent>() }
+    private val groupBtns = arrayOfNulls<TextView>(3)
+    private var groupLastK = -1
+    private var groupLastT = 0L
+
+    private fun groupSet(k: Int) {
+        val g = G ?: return
+        val own = g.sel.filter { it.team == 0 && !it.dead && (it is Unt || it is Bld) }
+        if (own.isEmpty()) { toast("Сначала выделите войска"); return }
+        groups[k].clear(); groups[k].addAll(own)
+        toast("Отряд ${k + 1} запомнен: ${own.size}")
+        sfx(S_CLICK, Double.NaN, Double.NaN)
+        syncGroups()
+    }
+
+    private fun groupTap(k: Int) {
+        val g = G ?: return
+        groups[k].removeAll { it.dead }
+        if (groups[k].isEmpty()) { groupSet(k); return }
+        val now = SystemClock.uptimeMillis()
+        if (groupLastK == k && now - groupLastT < 450) {
+            val list = groups[k]
+            g.centerCam(list.sumOf { it.x } / list.size, list.sumOf { it.y } / list.size)
+        }
+        groupLastK = k; groupLastT = now
+        g.sel = ArrayList(groups[k]); g.amove = false; g.uiDirty = true
+        sfx(S_CLICK, Double.NaN, Double.NaN)
+    }
+
+    private fun syncGroups() {
+        for (k in 0 until 3) {
+            groups[k].removeAll { it.dead }
+            val b = groupBtns[k] ?: continue
+            val t = if (groups[k].isEmpty()) "${k + 1}" else "${k + 1}·${groups[k].size}"
+            if (b.text.toString() != t) b.text = t
+            b.alpha = if (groups[k].isEmpty()) 0.6f else 1f
+        }
+    }
+
     private fun quickArmy() {
         val g = G ?: return
         g.sel = ArrayList(g.units.filter { it.team == 0 && it.type != U_PEASANT })
@@ -810,26 +970,34 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private fun startGame() {
         val v = gv ?: return
         val g = Game(optSize, optDiff, false, this, v.vwDp, v.vhDp)
+        launch(g)
+        hud.postDelayed({ if (G === g) toast("Выделите крестьян и постройте ферму и дома") }, 800)
+    }
+
+    private fun launch(g: Game) {
+        val v = gv ?: return
         demo = false; autoCam = false
+        groups.forEach { it.clear() }
         v.game = g
         menu.visibility = View.GONE
         hud.visibility = View.VISIBLE
         uiSig = ""; uiT = 0.0; miniT = 0.0
         syncHudButtons(g)
         startLoop()
-        hud.postDelayed({ if (G === g) toast("Выделите крестьян и постройте ферму и дома") }, 800)
     }
 
     private fun togglePause() {
         val g = G ?: return
         if (g.over) return
         g.paused = !g.paused
+        if (g.paused) saveBtn.text = "💾 Сохранить игру"
         pauseM.visibility = if (g.paused) View.VISIBLE else View.GONE
     }
 
     private fun toMenu() {
         gv?.game = null
         pauseM.visibility = View.GONE; endM.visibility = View.GONE; hud.visibility = View.GONE; menu.visibility = View.VISIBLE
+        refreshContinue()
         startDemo()
     }
 
@@ -854,7 +1022,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         val g = G ?: return
         if (demo) { demoCam(g, dtReal); return }
         uiT -= dtReal
-        if (uiT <= 0 || g.uiDirty) { uiT = 0.25; updateTop(g); updatePanel(g); syncHudButtons(g) }
+        if (uiT <= 0 || g.uiDirty) { uiT = 0.25; updateTop(g); updatePanel(g); syncHudButtons(g); syncGroups() }
         if (autoCam) {
             autoCamT -= dtReal
             if (autoCamT <= 0) {

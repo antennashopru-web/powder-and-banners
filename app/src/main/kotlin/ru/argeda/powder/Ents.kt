@@ -35,6 +35,7 @@ class Goal(
 
 const val TASK_GATHER = 0
 const val TASK_BUILD = 1
+const val TASK_REPAIR = 2
 
 class Task(val type: Int, val res: Int = -1) {
     var tile = -1
