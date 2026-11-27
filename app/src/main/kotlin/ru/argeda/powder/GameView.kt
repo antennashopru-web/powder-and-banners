@@ -299,14 +299,32 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                     pb.alpha = 255
                 }
                 D_RUIN -> {
-                    pf.color = 0xff4a3a2a.toInt(); alpha(pf, a)
-                    c.drawRect(x + 4, (y + d.h * 0.3).toFloat(), (x + d.w - 4).toFloat(), (y + d.h * 0.96).toFloat(), pf)
-                    pf.color = 0xff2a2018.toInt(); alpha(pf, a)
-                    for (k in 0 until 8) {
-                        val rx = (x + 6 + hash2(k, d.x.toInt(), 1) * (d.w - 18)).toFloat()
-                        val ry = (y + d.h * 0.35 + hash2(k, d.y.toInt(), 2) * d.h * 0.5).toFloat()
-                        c.drawRect(rx, ry, rx + 10, ry + 6, pf)
+                    // руины: выжженная земля, груды камня и обгорелые балки
+                    val cx = (x + d.w / 2).toFloat()
+                    val cy = (y + d.h * 0.66).toFloat()
+                    pf.color = rgba(28, 22, 16, .55 * a); oval(c, cx, cy, (d.w * 0.55).toFloat(), (d.h * 0.36).toFloat(), pf)
+                    pf.color = rgba(60, 48, 36, .5 * a); oval(c, cx, cy, (d.w * 0.4).toFloat(), (d.h * 0.25).toFloat(), pf)
+                    for (k in 0 until 14) {
+                        val ang = hash2(k, d.x.toInt(), 1) * PI * 2
+                        val rr = Math.sqrt(hash2(k, d.y.toInt(), 2))
+                        val rx = (cx + Math.cos(ang) * rr * d.w * 0.38).toFloat()
+                        val ry = (cy + Math.sin(ang) * rr * d.h * 0.22).toFloat()
+                        val sz = (2.5 + hash2(k, 7, d.x.toInt()) * 4).toFloat()
+                        pf.color = rgba(0, 0, 0, .3 * a); oval(c, rx + 1, ry + 1.2f, sz, sz * 0.6f, pf)
+                        val gch = (95 + hash2(k, 3, d.y.toInt()) * 60).toInt()
+                        pf.color = rgba(gch, gch - 6, gch - 14, a); oval(c, rx, ry, sz, sz * 0.7f, pf)
+                        pf.color = rgba(gch + 40, gch + 36, gch + 28, .7 * a); oval(c, rx - sz * 0.3f, ry - sz * 0.25f, sz * 0.45f, sz * 0.3f, pf)
                     }
+                    ps.strokeWidth = 2.6f; ps.strokeCap = Paint.Cap.ROUND
+                    for (k in 0 until 4) {
+                        val bx = (cx + (hash2(k, d.x.toInt(), 9) - 0.5) * d.w * 0.5).toFloat()
+                        val by = (cy + (hash2(k, d.y.toInt(), 8) - 0.5) * d.h * 0.25).toFloat()
+                        val ang = hash2(k, 5, 5) * PI
+                        val L = (10 + hash2(k, 6, 6) * 12).toFloat()
+                        ps.color = rgba(40, 26, 16, a)
+                        c.drawLine(bx, by, bx + (Math.cos(ang) * L).toFloat(), by + (Math.sin(ang) * L * 0.5).toFloat(), ps)
+                    }
+                    ps.strokeCap = Paint.Cap.BUTT
                 }
                 D_CRATER -> { pf.color = rgba(40, 30, 20, .45 * a); oval(c, x, y, 9f, 5f, pf) }
                 D_STUMP -> {

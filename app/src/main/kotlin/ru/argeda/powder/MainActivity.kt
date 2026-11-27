@@ -171,15 +171,15 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         f.isClickable = true
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         val logo = tv("ARGEDA", 46f, GOLD_L, true).apply {
-            letterSpacing = 0.32f; gravity = Gravity.CENTER
+            letterSpacing = 0.32f; gravity = Gravity.CENTER; setSingleLine(true); setPadding(dp(16), dp(4), 0, dp(4))
             setShadowLayer(dp(10).toFloat(), 0f, 0f, 0xaaffa030.toInt())
         }
-        col.addView(logo)
+        col.addView(logo, LinearLayout.LayoutParams(MP, WC))
         col.addView(View(this).apply { background = grad(0x00d9a84a, 0x00d9a84a, 0f).apply {
             orientation = GradientDrawable.Orientation.LEFT_RIGHT; colors = intArrayOf(0x00d9a84a, GILT, 0x00d9a84a)
         } }, LinearLayout.LayoutParams(dp(220), dp(2)).apply { topMargin = dp(10); bottomMargin = dp(10) })
         col.addView(tv("сделаем мир лучше", 19f, CREAM).apply { setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.08f; alpha = 0.9f })
-        f.addView(col, lp(WC, WC, Gravity.CENTER))
+        f.addView(col, lp(MP, WC, Gravity.CENTER))
         col.alpha = 0f; col.scaleX = 0.92f; col.scaleY = 0.92f
         col.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(900).start()
         splash = f
