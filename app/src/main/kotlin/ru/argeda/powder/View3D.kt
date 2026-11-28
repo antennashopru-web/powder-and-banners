@@ -124,7 +124,7 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
     }
 
     // ------------------------------------------------------------ деревья
-    private class TreeSet(val data: FloatArray, val kinds: IntArray)
+    private class TreeSet(val data: FloatArray, val kinds: IntArray, val deco: FloatArray, val dkinds: IntArray)
     private val trees = HashMap<Int, TreeSet>()
 
     private fun treesFor(G: Game, cx: Int, cy: Int): TreeSet {
@@ -144,7 +144,63 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
                 d.add((hash2(tx, ty, k + 40) * PI * 2).toFloat()); d.add((0.9 + hash2(tx, ty, k + 50) * 0.25).toFloat())
             }
         }
-        return TreeSet(d.toFloatArray(), kinds.toIntArray()).also { trees[key] = it }
+        // убранство: трава, цветочные поляны, кусты у опушек, камешки, кувшинки у берега
+        val dd = ArrayList<Float>(); val dk = ArrayList<Int>()
+        fun put(kind: Int, tx: Int, ty: Int, s: Int, sc: Double) {
+            dk.add(kind)
+            dd.add((tx * TILE + 4 + hash2(tx, ty, s) * 24).toFloat()); dd.add((ty * TILE + 4 + hash2(tx, ty, s + 1) * 24).toFloat())
+            dd.add((hash2(tx, ty, s + 2) * PI * 2).toFloat()); dd.add((sc * (0.8 + hash2(tx, ty, s + 3) * 0.45)).toFloat())
+        }
+        fun ter(x: Int, y: Int) = if (G.inB(x, y)) G.terrain[G.idx(x, y)].toInt() else -1
+        for (ty in cy * CH until min(G.H, cy * CH + CH)) for (tx in cx * CH until min(G.W, cx * CH + CH)) {
+            val i = G.idx(tx, ty)
+            val t = G.terrain[i].toInt()
+            if (G.occ[i] != 0) continue
+            val h = hash2(tx, ty, 77)
+            if (t == T_GRASS) {
+                val nearForest = (0 until 4).any { ter(tx + DX4[it], ty + DY4[it]) == T_FOREST }
+                val meadow = fbm(tx / 6.0, ty / 6.0, G.seed + 5) > 0.56
+                if (nearForest && h < 0.3) put(Models3D.D_BUSH + (if (hash2(tx, ty, 78) < 0.4) 1 else 0), tx, ty, 80, 1.0)
+                else if (meadow && h < 0.35) put(Models3D.D_FLOWER + (hash2(tx, ty, 79) * 4).toInt().coerceIn(0, 3), tx, ty, 90, 1.0)
+                else if (h < 0.025) put(Models3D.D_PEBBLE + (if (hash2(tx, ty, 81) < 0.5) 1 else 0), tx, ty, 100, 1.0)
+                else if (h < 0.05) put(Models3D.D_BUSH, tx, ty, 110, 0.8)
+                if (hash2(tx, ty, 82) < 0.4) put(Models3D.D_TUFT + (hash2(tx, ty, 83) * 3).toInt().coerceIn(0, 2), tx, ty, 120, 1.0)
+            } else if (t == T_SAND) {
+                if (h < 0.08) put(Models3D.D_PEBBLE + (if (hash2(tx, ty, 81) < 0.5) 1 else 0), tx, ty, 100, 0.9)
+            } else if (t == T_WATER) {
+                val shore = (0 until 4).any { val q = ter(tx + DX4[it], ty + DY4[it]); q == T_GRASS || q == T_SAND || q == T_FOREST }
+                if (shore && h < 0.14) put(Models3D.D_LILY + (if (hash2(tx, ty, 84) < 0.5) 1 else 0), tx, ty, 130, 1.0)
+            }
+        }
+        return TreeSet(d.toFloatArray(), kinds.toIntArray(), dd.toFloatArray(), dk.toIntArray()).also { trees[key] = it }
+    }
+
+    // ------------------------------------------------------------ горы и земля за краем карты
+    private var ring: FloatArray? = null
+    private var ringKinds: IntArray? = null
+    private fun ringFor(G: Game) {
+        if (ring != null) return
+        val d = ArrayList<Float>(); val k = ArrayList<Int>()
+        val MW = G.W * TILE.toFloat(); val MH = G.H * TILE.toFloat()
+        val P = 256f   // плита земли 64 px × 4
+        var x = -3 * P
+        while (x < MW + 3 * P) { var y = -3 * P
+            while (y < MH + 3 * P) {
+                if (x + P <= 0 || y + P <= 0 || x >= MW || y >= MH) { k.add(Models3D.D_EDGE); d.add(x + P / 2); d.add(y + P / 2); d.add(0f); d.add(4f) }
+                y += P }
+            x += P }
+        // горы вдоль краёв, ближе к карте — холмы
+        var n = 0
+        fun mount(px: Float, py: Float, far: Boolean) {
+            n++
+            val kind = if (far) Models3D.D_MOUNT + (hash2(n, 7, 3) * 3).toInt().coerceIn(0, 2) else Models3D.D_HILL + (hash2(n, 9, 3) * 3).toInt().coerceIn(0, 2)
+            k.add(kind); d.add(px); d.add(py); d.add((hash2(n, 1, 5) * PI * 2).toFloat()); d.add((if (far) 1.3 + hash2(n, 2, 5) * 0.8 else 0.9 + hash2(n, 3, 5) * 0.5).toFloat())
+        }
+        var s = -200f
+        while (s < MW + 200) { mount(s, -110f - hash2(n, 4, 1).toFloat() * 40, false); mount(s + 60, -300f, true); mount(s, MH + 110f + hash2(n, 5, 1).toFloat() * 40, false); mount(s + 60, MH + 300f, true); s += 130f }
+        s = -100f
+        while (s < MH + 200) { mount(-110f - hash2(n, 6, 1).toFloat() * 40, s, false); mount(-300f, s + 60, true); mount(MW + 110f + hash2(n, 8, 1).toFloat() * 40, s, false); mount(MW + 300f, s + 60, true); s += 130f }
+        ring = d.toFloatArray(); ringKinds = k.toIntArray()
     }
 
     // ------------------------------------------------------------ снимок кадра
@@ -179,7 +235,7 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
         val dt = min(0.1, (now - lastT) / 1e9)
         lastT = now
         if (G !== game) {
-            game = G; gen++; cellVer.clear(); requested.clear(); trees.clear(); faceAng.clear(); fogSent = -1
+            game = G; gen++; cellVer.clear(); requested.clear(); trees.clear(); faceAng.clear(); fogSent = -1; ring = null
             sendMap(G)
         }
         val cg = renderer.ctxGen.get()
@@ -223,6 +279,22 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             for (i in ts.kinds.indices) {
                 val o = i * 4
                 buckets[(Models3D.M_TREE + ts.kinds[i]) * 2].add(d[o], d[o + 1], d[o + 2], d[o + 3], 0f, 0f, 0f, KY * d[o + 3], 0f, 1f)
+            }
+            val dd = ts.deco
+            for (i in ts.dkinds.indices) {
+                val o = i * 4
+                buckets[(Models3D.M_DECO + ts.dkinds[i]) * 2].add(dd[o], dd[o + 1], dd[o + 2], dd[o + 3], 0f, 0f, 0f, KY * dd[o + 3], 0f, 1f)
+            }
+        }
+        // за краем карты
+        if (box[0] < 0 || box[1] < 0 || box[2] > MW || box[3] > MH) {
+            ringFor(G)
+            val rd = ring!!; val rk = ringKinds!!
+            for (i in rk.indices) {
+                val o = i * 4
+                val m = if (rk[i] == Models3D.D_EDGE) 200.0 else 320.0
+                if (rd[o] < box[0] - m || rd[o] > box[2] + m || rd[o + 1] < box[1] - m || rd[o + 1] > box[3] + m) continue
+                buckets[(Models3D.M_DECO + rk[i]) * 2].add(rd[o], rd[o + 1], rd[o + 2], rd[o + 3], 0f, 0f, 0f, KY * rd[o + 3], 0f, 1f)
             }
         }
         fun vis(x: Double, y: Double, m: Double) = x > box[0] - m && x < box[2] + m && y > box[1] - m && y < box[3] + m

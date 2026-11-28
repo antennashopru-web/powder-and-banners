@@ -32,7 +32,11 @@ object Models3D {
     val M_STONE = M_GOLD + 1
     val M_SCAFFOLD = M_STONE + 1
     val M_WALLSEG = M_SCAFFOLD + 1          // полупролёт стены от центра клетки к соседу
-    val COUNT = M_WALLSEG + 1
+    val M_DECO = M_WALLSEG + 1              // + убранство земли (DECO_N): трава, цветы, кусты, камешки, кувшинки, горы, земля за краем
+    const val DECO_N = 20
+    const val D_TUFT = 0; const val D_FLOWER = 3; const val D_BUSH = 7; const val D_PEBBLE = 9; const val D_LILY = 11
+    const val D_MOUNT = 13; const val D_HILL = 16; const val D_EDGE = 19
+    val COUNT = M_DECO + DECO_N
 
     // кадры анимации отрядов
     const val F_IDLE = 0
@@ -46,6 +50,7 @@ object Models3D {
         for (b in BLD) l.add("b_" + b.key)
         for (k in 0 until 8) l.add("tree$k")
         l.add("rock_gold"); l.add("rock_stone"); l.add("scaffold"); l.add("wall_seg")
+        for (k in 0 until DECO_N) l.add("deco$k")
         return l
     }
 

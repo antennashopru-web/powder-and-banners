@@ -310,7 +310,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         val nf = pending.getAndSet(null)
         if (nf != null) { cur?.let { free.offer(it) }; cur = nf }
         val f = cur
-        glClearColor(0.118f, 0.094f, 0.063f, 1f)
+        glClearColor(0.29f, 0.40f, 0.22f, 1f)
         if (f == null) { glClear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT); return }
         if (f.gen != gen) {
             for (t in chunkTex.values) glDeleteTextures(1, intArrayOf(t.id), 0)
@@ -556,8 +556,12 @@ void main() {
     vec3 tc = vC.x < 1.5 ? vec3(0.45, 1.0, 0.45) : vC.x < 2.5 ? vec3(1.0, 0.35, 0.3) : vec3(1.0, 0.95, 0.8);
     col = mix(col, tc, 0.45);
   }
-  vec4 f = texture(uFog, vW.xz / uMap);
+  col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 1.12);   // чуть сочнее цвета
+  vec4 f = texture(uFog, clamp(vW.xz / uMap, 0.0, 1.0));
   col = mix(col, f.rgb, f.a);
+  // дымка над далёкими горами за краем карты
+  float away = max(max(-vW.x, vW.x - uMap.x), max(-vW.z, vW.z - uMap.y));
+  col = mix(col, vec3(0.50, 0.60, 0.52), smoothstep(120.0, 750.0, away) * 0.65);
   o = vec4(col, vC.y);
 }
 """

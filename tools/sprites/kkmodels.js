@@ -15,8 +15,10 @@ async function kkLoad() {
   const L = async (p) => (await loadGLTF('kk/med/' + p + '.gltf')).scene;
   const B = ['castle', 'home_A', 'market', 'barracks', 'archeryrange', 'blacksmith', 'tower_A', 'windmill', 'lumbermill', 'church'];
   for (const b of B) KK.med[b] = [await L('buildings/blue/building_' + b + '_blue'), await L('buildings/red/building_' + b + '_red')];
-  for (const n of ['tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E', 'resource_stone', 'barrel', 'crate_A_big', 'sack', 'resource_lumber', 'wheelbarrow'])
-    KK.med[n] = await L('decoration/' + (/rock|tree/.test(n) ? 'nature/' : 'props/') + n);
+  for (const n of ['tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E', 'resource_stone', 'barrel', 'crate_A_big', 'sack', 'resource_lumber', 'wheelbarrow',
+    'trees_A_small', 'trees_A_medium', 'trees_B_small', 'trees_B_medium', 'waterlily_A', 'waterlily_B', 'waterplant_A', 'waterplant_B', 'waterplant_C',
+    'mountain_A_grass_trees', 'mountain_B_grass_trees', 'mountain_C_grass', 'hills_A_trees', 'hills_B_trees', 'hills_C_trees', 'tent', 'crate_long_A'])
+    KK.med[n] = await L('decoration/' + (/rock|tree|water|mountain|hill/.test(n) ? 'nature/' : 'props/') + n);
   KK.med.scaffold = await L('buildings/neutral/building_scaffolding');
   for (const n in KK.chars) for (let t = 0; t < 2; t++) recolorChar(KK.chars[n][t], n, t);
 }
@@ -219,8 +221,10 @@ const KK_BLD = {
   },
 };
 function kkTree(k) {
-  const pine = k < 4, src = pine ? KK.med.tree_single_A : KK.med.tree_single_B;
-  const r = rng(500 + k), s = 0.85 + r() * 0.35;
+  // 0..3 хвойные, 4..7 лиственные: одиночные деревья и купы по 2–3 дерева
+  const pine = k < 4, j = k % 4;
+  const src = KK.med[pine ? ['tree_single_A', 'tree_single_A', 'trees_A_small', 'trees_A_medium'][j] : ['tree_single_B', 'tree_single_B', 'trees_B_small', 'trees_B_medium'][j]];
+  const r = rng(500 + k), s = (j < 2 ? 0.85 + r() * 0.35 : j === 2 ? 1.2 : 1.35);
   return fitModel(src, 27 * s, 27 * s, 1.0 + r() * 0.15);
 }
 function kkRocks(kind) {
