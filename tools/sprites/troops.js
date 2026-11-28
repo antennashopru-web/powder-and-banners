@@ -97,3 +97,38 @@ function kkHero(team, fr) {
   const w = wrapChar(rig); w.scale.multiplyScalar(1.15);
   return w;
 }
+
+// осадная башня: деревянный сруб на колёсах, обтянут шкурами, наверху площадка с откидным мостиком и знаменем
+function kkSiege(team, fr) {
+  const T = TEAMS[team];
+  const g = new THREE.Group();
+  const wood = mat(0xb08458, { map: TX.planks }), dark = mat(0x7a5634, { map: TX.planks });
+  const hide = mat(0xc8a878, { roughness: 0.95 }), iron = mat(0x3a3a3e, { metalness: 0.6, roughness: 0.45 });
+  const rot = fr.kind === 'walk' ? (fr.i || 0) * Math.PI / 3 : 0;
+  // основание и колёса
+  g.add(box(18, 3, 16, dark, 0, 4.5, 0));
+  for (const x of [-6.5, 6.5]) for (const z of [-8.6, 8.6]) { const w = wheel(3.4, mat(0x5a3a1e)); w.position.set(x, 3.4, z); w.rotation.z = -rot; g.add(w); }
+  // сруб: четыре угловых столба, обшивка, шкуры
+  for (const x of [-7.5, 7.5]) for (const z of [-6.5, 6.5]) g.add(box(1.6, 44, 1.6, dark, x, 28, z));
+  g.add(box(14, 40, 12, wood, 0, 26, 0));
+  for (const y of [14, 26, 38]) g.add(box(15.6, 1.2, 13.6, iron, 0, y, 0));
+  for (const s of [-1, 1]) { const h = box(0.6, 18, 11, hide, s * 7.4, 22, 0); g.add(h); }
+  g.add(box(14.2, 16, 0.6, hide, 0, 20, 6.4));
+  g.add(box(2.6, 3.6, 0.4, mat(0x1a1410), 4.6, 34, 6.3));          // бойница
+  // верхняя площадка с зубцами
+  g.add(box(17, 1.6, 15, dark, 0, 47, 0));
+  for (const [x, z] of [[-7.6, -6.6], [7.6, -6.6], [-7.6, 6.6], [7.6, 6.6], [0, -6.6], [0, 6.6], [-7.6, 0]]) g.add(box(2, 3, 2, wood, x, 49.3, z));
+  g.add(box(16.4, 1, 1, mat(T.main), 0, 46, 7.6));                   // полоса цвета команды
+  // мостик: поднят (вертикально) или откинут вперёд в атаке
+  const br = new THREE.Group(); br.position.set(8.4, 47, 0); g.add(br);
+  const plank = box(1, 13, 10, wood, 0, 6.5, 0); br.add(plank);
+  for (const y of [3, 10]) br.add(box(1.3, 0.8, 10.4, iron, 0, y, 0));
+  br.rotation.z = fr.kind === 'act' ? -[1.1, 1.45, 1.55][fr.i] : 0;
+  // знамя
+  g.add(cyl(0.35, 0.35, 14, wood, -6, 55, -5, 5));
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(7, 4.5, 2, 1), mat(T.main, { side: THREE.DoubleSide }));
+  flag.position.set(-2.4, 59.5, -5); g.add(flag);
+  g.scale.setScalar(0.72);
+  if (fr.kind === 'dead') { g.scale.y *= 0.28; g.rotation.x = 0.12; }   // рухнувший сруб
+  return shadows(g);
+}

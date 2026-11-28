@@ -55,6 +55,7 @@ const val U_GREN = 6
 const val U_DRAGOON = 7
 const val U_MORTAR = 8
 const val U_HERO = 9
+const val U_SIEGE = 10
 /** радиус, в котором герой воодушевляет своих */
 const val HERO_AURA = 5.0 * 32
 /** стреляет из ружья или орудия: кадр выстрела по перезарядке */
@@ -79,9 +80,11 @@ val UNIT = arrayOf(
         "Навесной огонь издалека: рушит стены и здания, вблизи беззащитна", ranged = true, splash = 50.0, vsBld = 3.5),
     UDef("hero", "Генерал", 900, 40.0, 22.0, 1.0, 60.0, 9, cost(food = 200, gold = 150), 30.0, 3, 8.0,
         "Герой, один на армию. Сильный боец, свои рядом бьют сильнее и держатся крепче"),
+    UDef("siege", "Осадная башня", 520, 0.0, 14.0, 1.0, 22.0, 7, cost(wood = 260, stone = 40, gold = 40), 26.0, 2, 12.0,
+        "Подкатите к вражеской стене: с башни перекинут мостик, и ваши войска пройдут поверх стены"),
 )
 // pike 0, musket 1, cav 2, cannon 3, peasant 4
-val FORM_ORDER = intArrayOf(4, 0, 1, 2, 3, 5, 1, 2, 3, 1)
+val FORM_ORDER = intArrayOf(4, 0, 1, 2, 3, 5, 1, 2, 3, 1, 5)
 
 class BDef(
     val key: String, val name: String, val w: Int, val h: Int, val hp: Int, val cost: IntArray, val time: Double,
@@ -112,7 +115,7 @@ val BLD = arrayOf(
     BDef("store", "Рынок", 2, 2, 600, cost(wood = 100), 18.0, 5, "Торговля ресурсами; сюда сдают добычу", drop = true),
     BDef("barracks", "Казарма", 3, 3, 1300, cost(wood = 150, stone = 50), 35.0, 6, "Пикинёры, мушкетёры и гренадеры", trains = intArrayOf(U_PIKE, U_MUSKET, U_GREN)),
     BDef("stable", "Конюшня", 3, 3, 1200, cost(wood = 200, stone = 50, gold = 50), 40.0, 6, "Рейтары и драгуны", trains = intArrayOf(U_CAV, U_DRAGOON)),
-    BDef("foundry", "Литейня", 3, 3, 1400, cost(wood = 200, stone = 150, gold = 100), 50.0, 6, "Пушки и мортиры", trains = intArrayOf(U_CANNON, U_MORTAR)),
+    BDef("foundry", "Литейня", 3, 3, 1400, cost(wood = 200, stone = 150, gold = 100), 50.0, 6, "Пушки, мортиры и осадные башни", trains = intArrayOf(U_CANNON, U_MORTAR, U_SIEGE)),
     BDef("tower", "Башня", 2, 2, 1000, cost(wood = 50, stone = 150), 30.0, 9, "Стреляет по врагам", atk = 15.0, range = 230.0, cd = 1.8),
     BDef("lair", "Логово дракона", 3, 3, 1600, cost(wood = 250, stone = 250), 55.0, 7, "Драконы: летают и жгут огнём", trains = intArrayOf(U_DRAGON)),
     BDef("wall", "Стена", 1, 1, 600, cost(stone = 10), 5.0, 2, "Враг не пройдёт, пока не проломит. Проведите пальцем, чтобы протянуть стену"),

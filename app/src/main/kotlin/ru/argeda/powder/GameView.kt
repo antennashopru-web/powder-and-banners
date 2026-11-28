@@ -409,7 +409,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
             val x: Float
             val y: Float
             if (e is Bld) { w = e.w * TILE * 0.7f; x = e.x.toFloat() - w / 2; y = e.ty * TILE - 12f }
-            else { val u = e as Unt; w = if (u.type == U_DRAGON) 26f else 16f; x = u.x.toFloat() - w / 2; y = u.y.toFloat() - (if (u.type == U_CAV || u.type == U_DRAGOON) 38 else if (u.type == U_CANNON || u.type == U_MORTAR) 24 else if (u.type == U_DRAGON) 86 else 30) }
+            else { val u = e as Unt; w = if (u.type == U_DRAGON) 26f else 16f; x = u.x.toFloat() - w / 2; y = u.y.toFloat() - (if (u.type == U_CAV || u.type == U_DRAGOON) 38 else if (u.type == U_CANNON || u.type == U_MORTAR) 24 else if (u.type == U_DRAGON) 86 else if (u.type == U_SIEGE) 66 else 30) }
             val bh = if (e is Bld) 3.5f else 2.5f
             pf.color = rgba(20, 12, 6, .78); rf.set(x - 1.2f, y - 1.2f, x + w + 1.2f, y + bh + 1.2f); c.drawRoundRect(rf, 1.6f, 1.6f, pf)
             val f = clamp(e.hp / e.maxhp, 0.0, 1.0).toFloat()
