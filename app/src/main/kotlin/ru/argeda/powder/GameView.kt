@@ -349,7 +349,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         // площадки зданий
         pf.color = rgba(120, 92, 58, .38)
         for (b in G.blds) {
-            if (!G.seen(b) || b.x < v[0] - 160 || b.x > v[2] + 160 || b.y < v[1] - 160 || b.y > v[3] + 160) continue
+            if (!G.seen(b) || isWall(b.type) || b.x < v[0] - 160 || b.x > v[2] + 160 || b.y < v[1] - 160 || b.y > v[3] + 160) continue
             val x0 = b.tx * TILE.toFloat()
             val y0 = b.ty * TILE.toFloat()
             val w = b.w * TILE.toFloat()
@@ -376,6 +376,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                     ps.color = if (e.team == 0) 0xff7cff6a.toInt() else 0xffff6a5a.toInt(); ps.strokeWidth = 2f
                     oval(c, e.x.toFloat(), (e.y + e.h * TILE * 0.2).toFloat(), e.w * TILE * 0.62f, e.h * TILE * 0.42f, ps)
                 }
+                if (isWall(e.type) && e.built) { drawWall(c, G, e); continue }
                 spr.drawBuilding(c, e.type, e.team, e.tx * TILE.toFloat(), e.ty * TILE.toFloat(), if (e.built) 1f else (e.progress / BLD[e.type].time).toFloat(), pb, pf, ps)
                 if (e.built && e.hp < e.maxhp * 0.55) drawFire(c, e, t)
                 continue
@@ -455,6 +456,19 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         }
         // призрак здания
         G.placing?.let { p ->
+            if (p.type == B_WALL) {
+                pb.alpha = (0.6 * 255).toInt()
+                for (k in p.line.indices) {
+                    val i = p.line[k]
+                    val x0 = (i % G.W) * TILE.toFloat()
+                    val y0 = (i / G.W) * TILE.toFloat()
+                    pf.color = if (p.oks[k]) rgba(80, 255, 80, .22) else rgba(255, 60, 40, .3)
+                    c.drawRect(x0, y0, x0 + TILE, y0 + TILE, pf)
+                    if (p.oks[k]) spr.drawBuilding(c, B_WALL, 0, x0, y0, 1f, pb, pf, ps)
+                }
+                pb.alpha = 255
+                return@let
+            }
             val d = BLD[p.type]
             pb.alpha = (0.6 * 255).toInt()
             spr.drawBuilding(c, p.type, 0, p.tx * TILE.toFloat(), p.ty * TILE.toFloat(), 1f, pb, pf, ps)
@@ -546,6 +560,23 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
             ell(x - cd.r * 0.55, y + cd.r * 0.08, cd.r * 0.6, cd.r * 0.35 * cd.k)
             c.drawPath(path, pf)
         }
+    }
+
+    /** стена: полупролёты к соседям (сначала дальние), столб, ближний пролёт; ворота вдоль или поперёк */
+    private fun drawWall(c: Canvas, G: Game, b: Bld) {
+        val cx = b.x.toFloat()
+        val cy = b.y.toFloat()
+        if (b.type == B_GATE) {
+            if (G.gateVertical(b)) spr.drawWallPart(c, 4, b.team, cx, cy, pb)
+            else spr.drawBuilding(c, b.type, b.team, b.tx * TILE.toFloat(), b.ty * TILE.toFloat(), 1f, pb, pf, ps)
+            return
+        }
+        val m = G.wallLinks(b)
+        if (m and 8 != 0) spr.drawWallPart(c, 3, b.team, cx, cy, pb)
+        if (m and 4 != 0) spr.drawWallPart(c, 2, b.team, cx, cy, pb)
+        if (m and 1 != 0) spr.drawWallPart(c, 0, b.team, cx, cy, pb)
+        spr.drawBuilding(c, b.type, b.team, b.tx * TILE.toFloat(), b.ty * TILE.toFloat(), 1f, pb, pf, ps)
+        if (m and 2 != 0) spr.drawWallPart(c, 1, b.team, cx, cy, pb)
     }
 
     private fun drawFire(c: Canvas, b: Bld, t: Double) {
@@ -645,6 +676,8 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         var z0 = 1.0
         var mx = 0f
         var my = 0f
+        var wx = 0.0
+        var wy = 0.0
     }
 
     private var gest: Gest? = null
@@ -671,6 +704,8 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                 val y = e.y / d
                 val g = Gest(if (G.boxMode && G.placing == null) M_BOX else M_PEND, x, y)
                 gest = g
+                // стена: палец тянет её от точки касания
+                if (G.placing?.type == B_WALL) { g.mode = M_WALL; g.wx = toWorldX(G, x); g.wy = toWorldY(G, y); G.setWallLine(g.wx, g.wy, g.wx, g.wy) }
                 if (g.mode == M_PEND && G.placing == null) postDelayed(longPress, 400)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -707,6 +742,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                 if (g.mode == M_DEAD) return true
                 val x = e.getX(0) / d
                 val y = e.getY(0) / d
+                if (g.mode == M_WALL) { G.setWallLine(g.wx, g.wy, toWorldX(G, x), toWorldY(G, y)); return true }
                 val dx = x - g.lx
                 val dy = y - g.ly
                 val far = hyp((x - g.sx).toDouble(), (y - g.sy).toDouble()) > 9
@@ -744,6 +780,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         const val M_BOX = 2
         const val M_PINCH = 3
         const val M_DEAD = 4
+        const val M_WALL = 5
     }
 }
 

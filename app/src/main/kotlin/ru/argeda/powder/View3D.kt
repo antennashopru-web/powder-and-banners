@@ -268,6 +268,23 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             if (!vis(b.x, b.y, 120.0) || !G.seen(b)) continue
             val d = BLD[b.type]
             val team = b.team.coerceIn(0, 1)
+            if (isWall(b.type)) {
+                // стена: столб и полупролёты к соседям, ворота вдоль или поперёк
+                if (sel.contains(b)) decal(b.x, b.y, TILE * 0.62, TILE * 0.62, if (b.team == 0) 0xff7cff6a.toInt() else 0xffff6a5a.toInt(), 0.95, 1)
+                val prog = if (b.built) 1f else (b.progress / d.time).toFloat().coerceIn(0f, 1f)
+                val sy = KY * (0.15f + 0.85f * prog)
+                if (!b.built) buckets[Models3D.M_SCAFFOLD * 2].add(b.x.toFloat(), b.y.toFloat(), 0f, 0.48f, 0f, 0f, 0f, KY * 0.6f, 0f, 1f)
+                if (b.type == B_GATE) {
+                    val ang = if (G.gateVertical(b)) (PI / 2).toFloat() else 0f
+                    buckets[(Models3D.M_BLD + b.type) * 2 + team].add(b.x.toFloat(), b.y.toFloat(), ang, 1f, 0f, 0f, 0f, sy, 0f, 1f)
+                } else {
+                    buckets[(Models3D.M_BLD + b.type) * 2 + team].add(b.x.toFloat(), b.y.toFloat(), 0f, 1f, 0f, 0f, 0f, sy, 0f, 1f)
+                    val m = G.wallLinks(b)
+                    for (k in 0 until 4) if (m and (1 shl k) != 0)
+                        buckets[Models3D.M_WALLSEG * 2 + team].add(b.x.toFloat(), b.y.toFloat(), (k * PI / 2).toFloat(), 1f, 0f, 0f, 0f, sy, 0f, 1f)
+                }
+                continue
+            }
             decal(b.x, b.y + 4, d.w * TILE * 0.62, d.h * TILE * 0.58, 0xff78603a.toInt(), 0.35, 0)
             if (sel.contains(b)) decal(b.x, b.y, d.w * TILE * 0.62, d.h * TILE * 0.62, if (b.team == 0) 0xff7cff6a.toInt() else 0xffff6a5a.toInt(), 0.95, 1)
             val prog = if (b.built) 1f else (b.progress / d.time).toFloat().coerceIn(0f, 1f)
@@ -323,12 +340,24 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
         if (s0 is Bld) s0.rally?.let { r -> decal(r.x, r.y, 9.0, 9.0, 0xffffe68c.toInt(), 0.8, 1) }
         // призрак здания
         G.placing?.let { p ->
+            if (p.type == B_WALL) {
+                ghostModel = Models3D.M_BLD + B_WALL
+                for (k in p.line.indices) {
+                    val i = p.line[k]
+                    val cx = (i % G.W + 0.5) * TILE
+                    val cy = (i / G.W + 0.5) * TILE
+                    decal(cx, cy, TILE / 2.0, TILE / 2.0, if (p.oks[k]) 0xff50ff50.toInt() else 0xffff3c28.toInt(), 0.6, 2)
+                    if (p.oks[k]) ghost.add(cx.toFloat(), cy.toFloat(), 0f, 1f, 0f, 0f, 0f, KY, 1f, 0.6f)
+                }
+                return@let
+            }
             val d = BLD[p.type]
             val x0 = p.tx * TILE.toDouble()
             val y0 = p.ty * TILE.toDouble()
             decal(x0 + d.w * TILE / 2.0, y0 + d.h * TILE / 2.0, d.w * TILE / 2.0, d.h * TILE / 2.0, if (p.ok) 0xff50ff50.toInt() else 0xffff3c28.toInt(), 0.6, 2)
             ghostModel = Models3D.M_BLD + p.type
-            ghost.add((x0 + d.w * TILE / 2.0).toFloat(), (y0 + d.h * TILE / 2.0).toFloat(), 0f, 1f, 0f, 0f, 0f, KY, if (p.ok) 1f else 2f, 0.6f)
+            val gAng = if (p.type == B_GATE && G.gateVerticalAt(p.tx, p.ty, 0)) (PI / 2).toFloat() else 0f
+            ghost.add((x0 + d.w * TILE / 2.0).toFloat(), (y0 + d.h * TILE / 2.0).toFloat(), gAng, 1f, 0f, 0f, 0f, KY, if (p.ok) 1f else 2f, 0.6f)
         }
         // упаковка
         var total = 0
@@ -421,6 +450,8 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
         var twist = false
         var mx = 0f
         var my = 0f
+        var wx = 0.0
+        var wy = 0.0
     }
 
     private var gest: Gest? = null
@@ -456,6 +487,8 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
                 onTouchStart?.invoke()
                 val g = Gest(if (G.boxMode && G.placing == null) M_BOX else M_PEND, e.x / d, e.y / d)
                 gest = g
+                // стена: палец тянет её от точки касания
+                if (G.placing?.type == B_WALL) groundAt(G, g.sx, g.sy)?.let { w -> g.mode = M_WALL; g.wx = w[0]; g.wy = w[1]; G.setWallLine(w[0], w[1], w[0], w[1]) }
                 if (g.mode == M_PEND && G.placing == null) postDelayed(longPress, 400)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -496,6 +529,7 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
                 if (g.mode == M_DEAD) return true
                 val x = e.getX(0) / d
                 val y = e.getY(0) / d
+                if (g.mode == M_WALL) { groundAt(G, x, y)?.let { w -> G.setWallLine(g.wx, g.wy, w[0], w[1]) }; return true }
                 val far = hyp((x - g.sx).toDouble(), (y - g.sy).toDouble()) > 9
                 if (g.mode == M_PEND && far) { g.mode = M_PAN; removeCallbacks(longPress) }
                 if (g.mode == M_PAN) drag(G, g.lx, g.ly, x, y)
@@ -558,7 +592,7 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             val sel = G.sel
             // огонь на повреждённых зданиях
             for (b in G.blds) {
-                if (!b.built || b.hp >= b.maxhp * 0.55 || !G.seen(b)) continue
+                if (!b.built || isWall(b.type) || b.hp >= b.maxhp * 0.55 || !G.seen(b)) continue
                 val n = if (b.hp < b.maxhp * 0.3) 4 else 2
                 for (i in 0 until n) {
                     val fx = b.tx * TILE + b.w * TILE * (0.25 + 0.5 * hash2(b.id, i, 3))
@@ -676,5 +710,6 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
         const val M_BOX = 2
         const val M_PINCH = 3
         const val M_DEAD = 4
+        const val M_WALL = 5
     }
 }

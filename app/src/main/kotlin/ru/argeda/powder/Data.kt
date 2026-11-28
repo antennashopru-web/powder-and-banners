@@ -79,6 +79,9 @@ const val B_STABLE = 5
 const val B_FOUNDRY = 6
 const val B_TOWER = 7
 const val B_LAIR = 8
+const val B_WALL = 9
+const val B_GATE = 10
+fun isWall(type: Int) = type == B_WALL || type == B_GATE
 
 val BLD = arrayOf(
     BDef("hall", "Ратуша", 3, 3, 2400, cost(wood = 300, stone = 200), 60.0, 9, "Сердце поселения: крестьяне и склад", pop = 15, drop = true, trains = intArrayOf(U_PEASANT), atk = 8.0, range = 200.0, cd = 2.0),
@@ -90,19 +93,23 @@ val BLD = arrayOf(
     BDef("foundry", "Литейня", 3, 3, 1400, cost(wood = 200, stone = 150, gold = 100), 50.0, 6, "Пушки", trains = intArrayOf(U_CANNON)),
     BDef("tower", "Башня", 2, 2, 1000, cost(wood = 50, stone = 150), 30.0, 9, "Стреляет по врагам", atk = 15.0, range = 230.0, cd = 1.8),
     BDef("lair", "Логово дракона", 3, 3, 1600, cost(wood = 250, stone = 250), 55.0, 7, "Драконы: летают и жгут огнём", trains = intArrayOf(U_DRAGON)),
+    BDef("wall", "Стена", 1, 1, 600, cost(stone = 10), 5.0, 2, "Враг не пройдёт, пока не проломит. Проведите пальцем, чтобы протянуть стену"),
+    BDef("gate", "Ворота", 1, 1, 1100, cost(wood = 20, stone = 20), 12.0, 3, "Свои проходят, чужие нет. Можно поставить прямо на стену"),
 )
-val BUILD_LIST = intArrayOf(B_HOUSE, B_FARM, B_STORE, B_BARRACKS, B_STABLE, B_FOUNDRY, B_LAIR, B_TOWER, B_HALL)
+val BUILD_LIST = intArrayOf(B_HOUSE, B_FARM, B_STORE, B_BARRACKS, B_STABLE, B_FOUNDRY, B_LAIR, B_TOWER, B_WALL, B_GATE, B_HALL)
 
-class Diff(val mult: Double, val peas: Int, val wave: Int, val grow: Int, val interval: Double, val first: Double, val pace: Double, val cannons: Int, val bonus: Int, val dragons: Int)
+class Diff(val mult: Double, val peas: Int, val wave: Int, val grow: Int, val interval: Double, val first: Double, val pace: Double, val cannons: Int, val bonus: Int, val dragons: Int, val walls: Int)
 
 val DIFF = arrayOf(
-    Diff(0.7, 16, 6, 3, 260.0, 620.0, 1.5, 1, 0, 0),
-    Diff(1.0, 24, 10, 4, 210.0, 450.0, 1.0, 2, 100, 1),
-    Diff(1.4, 32, 12, 5, 170.0, 330.0, 0.75, 4, 300, 2),
+    Diff(0.7, 16, 6, 3, 260.0, 620.0, 1.5, 1, 0, 0, 0),
+    Diff(1.0, 24, 10, 4, 210.0, 450.0, 1.0, 2, 100, 1, 1),
+    Diff(1.4, 32, 12, 5, 170.0, 330.0, 0.75, 4, 300, 2, 2),
 )
 
 val DX = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
 val DY = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
+val DX4 = intArrayOf(1, 0, -1, 0)
+val DY4 = intArrayOf(0, 1, 0, -1)
 val DC = doubleArrayOf(1.0, 1.0, 1.0, 1.0, 1.414, 1.414, 1.414, 1.414)
 
 // ============================================================ утилиты

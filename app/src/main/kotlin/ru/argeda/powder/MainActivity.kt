@@ -267,6 +267,17 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                     g.spawnUnit(U_DRAGON, 1, h.x + 260, h.y - 120)
                     g.computePop()
                 }
+                if (it.getBooleanExtra("walls", false)) {
+                    // для проверки: кольцо стен с воротами вокруг ратуши и отряд врага у стены
+                    val h = g.blds.first { b -> b.team == 0 && b.type == B_HALL }
+                    for (j in h.ty - 3..h.ty + 5) for (i in h.tx - 3..h.tx + 5) {
+                        if (i != h.tx - 3 && i != h.tx + 5 && j != h.ty - 3 && j != h.ty + 5) continue
+                        val type = if (i == h.tx + 1 || j == h.ty + 1) B_GATE else B_WALL
+                        if (g.canPlace(type, i, j, 1)) g.placeBuilding(type, 0, i, j, true)
+                    }
+                    for (k in 0 until 6) g.spawnUnit(U_PIKE, 1, h.x + 200 + (k % 3) * 16, h.y - 40 + (k / 3) * 16).let { u -> u.cmd = CMD_AMOVE; u.hasAmove = true; u.amX = h.x; u.amY = h.y; g.walkTeam = 1; g.goalPt(u, h.x, h.y, 10.0); g.walkTeam = -1 }
+                    g.computePop()
+                }
                 if (it.hasExtra("zoom")) { g.camZ = it.getFloatExtra("zoom", 1f).toDouble().coerceIn(0.45, 2.0); g.clampCam() }
             }
         } else startDemo()
@@ -479,6 +490,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "<b>Отряды 1·2·3:</b> выделите войска и нажмите кнопку с номером — отряд запомнится. Потом одно нажатие выбирает его, второе подряд — переносит к нему камеру. Удержание — запомнить заново.",
             "<b>Сохранение:</b> в паузе есть «Сохранить игру», а при сворачивании игра сохраняется сама. Продолжить можно из главного меню.",
             "<b>Войска:</b> пикинёры держат конницу, мушкетёры бьют залпом издалека, рейтары быстры, пушки рушат здания и строи.",
+            "<b>Стены и ворота:</b> выберите «Стена» и проведите пальцем по земле: стена тянется по прямой, по 10 камня за кусок. Ворота пропускают только своих, их можно поставить прямо на стену. Враг стену не обходит, а проламывает, пушки делают это быстрее всех.",
             "<b>Драконы:</b> стройте логово дракона. Драконы летают над лесом и водой и жгут огнём всё вокруг цели. Пикинёры, рейтары и пушки до них не достают: сбивают их мушкетёры, башни и ратуша.",
         )
         for (p in ps) help.addView(tv(html(p), 13.5f).apply { setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0) })
@@ -761,7 +773,11 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
         val pl = g.placing
         if (pl != null) {
-            setInfo(spr!!.bldIcons[pl.type], BLD[pl.type].name, -1.0, BLD[pl.type].desc, -1.0, "Нажмите на карту, чтобы выбрать место")
+            if (pl.type == B_WALL) {
+                val n = pl.oks.count { it }
+                setInfo(spr!!.bldIcons[pl.type], BLD[pl.type].name, -1.0, "Проведите пальцем по карте: стена тянется по прямой", -1.0,
+                    if (n > 0) "Кусков: $n · цена ${costStr(IntArray(4) { BLD[B_WALL].cost[it] * n })}" else "Сюда нельзя: нужна свободная земля")
+            } else setInfo(spr!!.bldIcons[pl.type], BLD[pl.type].name, -1.0, BLD[pl.type].desc, -1.0, "Нажмите на карту, чтобы выбрать место")
         } else if (sel.isEmpty()) {
             setInfo(null, "Ничего не выбрано", -1.0, "Тап по своему отряду или зданию. Удерживайте палец, чтобы выделить рамкой.", -1.0)
         } else if (sel.size == 1) {

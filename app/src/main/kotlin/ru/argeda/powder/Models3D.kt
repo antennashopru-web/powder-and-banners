@@ -31,7 +31,8 @@ object Models3D {
     val M_GOLD = M_TREE + 8
     val M_STONE = M_GOLD + 1
     val M_SCAFFOLD = M_STONE + 1
-    val COUNT = M_SCAFFOLD + 1
+    val M_WALLSEG = M_SCAFFOLD + 1          // полупролёт стены от центра клетки к соседу
+    val COUNT = M_WALLSEG + 1
 
     // кадры анимации отрядов
     const val F_IDLE = 0
@@ -44,7 +45,7 @@ object Models3D {
         for (u in UNIT) l.add("u_" + u.key)
         for (b in BLD) l.add("b_" + b.key)
         for (k in 0 until 8) l.add("tree$k")
-        l.add("rock_gold"); l.add("rock_stone"); l.add("scaffold")
+        l.add("rock_gold"); l.add("rock_stone"); l.add("scaffold"); l.add("wall_seg")
         return l
     }
 

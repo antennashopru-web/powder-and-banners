@@ -154,6 +154,9 @@ class Placing(val type: Int) {
     var tx = 0
     var ty = 0
     var ok = false
+    /** стена тянется линией: клетки (индексы) и можно ли строить на каждой */
+    var line = IntArray(0)
+    var oks = BooleanArray(0)
 }
 
 class Stats {
@@ -166,6 +169,7 @@ class Stats {
 
 class AI(val diff: Int, var nextAttack: Double) {
     var wave = 0
+    var walls = 0
     var hasHome = false
     var hx = 0.0
     var hy = 0.0

@@ -21,6 +21,9 @@ class Sprites(am: AssetManager) {
     val tmeta: SprMeta
     val rocks: Bitmap
     val rmeta: SprMeta
+    /** части стены: полупролёты на восток, юг, запад, север и ворота поперёк; строка = команда */
+    val wparts: Bitmap
+    val wmeta: SprMeta
     val unitIcons = arrayOfNulls<Bitmap>(UNIT.size)
     val bldIcons = arrayOfNulls<Bitmap>(BLD.size)
 
@@ -67,6 +70,8 @@ class Sprites(am: AssetManager) {
         trees = load("trees")
         rmeta = meta(js.getJSONObject("rocks"))
         rocks = load("rocks")
+        wmeta = meta(js.getJSONObject("wallparts"))
+        wparts = gpu(load("wallparts"))
     }
 
     /** вписать кадр в иконку 72×72 по границам непрозрачных пикселей */
@@ -152,6 +157,16 @@ class Sprites(am: AssetManager) {
         src.set(col * sc, 0, (col + m.cw) * sc, m.ch * sc)
         dst.set(cx - m.ax, cy - m.ay, cx - m.ax + m.cw, cy - m.ay + m.ch)
         g.drawBitmap(bmp, src, dst, p)
+    }
+
+    /** часть стены k (0-3 полупролёт к соседу, 4 ворота поперёк); (cx, cy) — центр клетки */
+    fun drawWallPart(g: Canvas, k: Int, team: Int, cx: Float, cy: Float, p: Paint) {
+        val m = wmeta
+        val sc = m.scale
+        val row = if (team != 0) 1 else 0
+        src.set(k * m.cw * sc, row * m.ch * sc, (k + 1) * m.cw * sc, (row + 1) * m.ch * sc)
+        dst.set(cx - m.ax, cy - m.ay, cx - m.ax + m.cw, cy - m.ay + m.ch)
+        g.drawBitmap(wparts, src, dst, p)
     }
 
     fun drawTree(g: Canvas, x: Float, y: Float, k: Int, p: Paint) {

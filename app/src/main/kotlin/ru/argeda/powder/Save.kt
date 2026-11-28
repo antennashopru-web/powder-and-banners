@@ -36,7 +36,7 @@ object Save {
         })
         o.put("ai", JSONArray().apply {
             for (a in g.ai) put(if (a == null) JSONObject.NULL else JSONObject().apply {
-                put("diff", a.diff); put("next", a.nextAttack); put("wave", a.wave)
+                put("diff", a.diff); put("next", a.nextAttack); put("wave", a.wave); put("walls", a.walls)
                 put("home", a.hasHome); put("hx", a.hx); put("hy", a.hy)
             })
         })
@@ -114,7 +114,7 @@ object Save {
         for (t in 0..1) {
             val a = ai.optJSONObject(t) ?: continue
             g.ai[t] = AI(a.getInt("diff"), a.getDouble("next")).apply {
-                wave = a.getInt("wave"); hasHome = a.getBoolean("home"); hx = a.getDouble("hx"); hy = a.getDouble("hy")
+                wave = a.getInt("wave"); walls = a.optInt("walls", 0); hasHome = a.getBoolean("home"); hx = a.getDouble("hx"); hy = a.getDouble("hy")
             }
         }
         // залежи: номер как в игре (на клетках occ = -номер)

@@ -137,6 +137,7 @@ window.bakeAll = async function () {
   out.rock_gold = bakeModel(() => kkRocks('gold'), 1, 1);
   out.rock_stone = bakeModel(() => kkRocks('stone'), 1, 1);
   out.scaffold = bakeModel(() => fitModel(KK.med.scaffold, 64, 64), 1, 1);
+  out.wall_seg = bakeModel((team) => kkWallSeg(team), 2, 1);
   // упаковка: JSON-оглавление + один двоичный блок
   const index = {}, chunks = []; let off = 0;
   const push = (ta) => { const pad = (4 - (off % 4)) % 4; if (pad) { chunks.push(new Uint8Array(pad)); off += pad; } const u8 = new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength); chunks.push(u8); const o = off; off += u8.byteLength; return o; };

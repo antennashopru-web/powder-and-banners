@@ -13,6 +13,7 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   const save = (name, o) => { fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(o.url.split(',')[1], 'base64')); return o.meta; };
   for (const k in res.units) meta.units[k] = save('u_' + k, res.units[k]);
   for (const k in res.blds) meta.blds[k] = save('b_' + k, res.blds[k]);
+  if (res.wallparts) meta.wallparts = save('wallparts', res.wallparts);
   if (res.trees) { meta.trees = save('trees', res.trees); meta.rocks = save('rocks', res.rocks); }
   fs.writeFileSync(mf, JSON.stringify(meta)); console.log(JSON.stringify(meta).slice(0, 600));
   await b.close();
