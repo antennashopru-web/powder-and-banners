@@ -82,6 +82,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     var paused = false
     var over = false
     var winner = -1
+    /** номер миссии кампании или -1 для обычной битвы */
+    var mission = -1
     var fogT = 0.0
     var aiT = 0.0
     var endT = 0.0
@@ -1736,6 +1738,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     // ============================================================ конец игры
     private fun checkEnd() {
         if (over) return
+        if (mission >= 0) { val r = Campaign.check(this); if (r != 0) { endGame(r > 0); return } }
         val alive = BooleanArray(2) { t ->
             blds.any { it.team == t && !it.dead && !isWall(it.type) } || units.any { it.team == t && !it.dead && it.type != U_PEASANT } ||
                 units.any { it.team == t && !it.dead && it.type == U_PEASANT && blds.any { b -> b.team == t } }

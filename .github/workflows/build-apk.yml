@@ -116,6 +116,18 @@ jobs:
             adb shell am start -n ru.argeda.powder/.MainActivity --ei oldbuild 1
             sleep 25
             adb exec-out screencap -p > shots/13-update.png
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ez campaign true
+            sleep 22
+            adb exec-out screencap -p > shots/14-campaign.png
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ei mission 3 --ei speed 1
+            sleep 30
+            adb exec-out screencap -p > shots/15-mission.png
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ei mission 1 --ei speed 3
+            sleep 45
+            adb exec-out screencap -p > shots/16-mission-hold.png
             adb logcat -d > shots/logcat.txt || true
 
       - uses: actions/upload-artifact@v4

@@ -90,6 +90,8 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private lateinit var acts: LinearLayout
     private lateinit var place: View
     private lateinit var toastTv: TextView
+    private lateinit var objTv: TextView
+    private lateinit var endNext: TextView
     private var qBar: View? = null
     private var uiSig = ""
     private var uiT = 0.0
@@ -252,7 +254,14 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         // для проверки на эмуляторе: am start ... --ei start 1 --ez autopilot true --ei speed 3
         val it = intent
         if (it != null && it.hasExtra("oldbuild")) Updater.pretend = it.getIntExtra("oldbuild", 0).toLong()
-        if (it == null || !it.hasExtra("start")) Updater.check(this, false)
+        val ciCamp = it != null && (it.hasExtra("mission") || it.getBooleanExtra("campaign", false))
+        if ((it == null || !it.hasExtra("start")) && !ciCamp) Updater.check(this, false)
+        // для проверки сборки: --ei mission N запускает миссию, --ez campaign true открывает список миссий
+        if (it != null && it.hasExtra("mission")) {
+            if (it.getBooleanExtra("gfx2d", false)) set3d(false, save = false)
+            startMission(it.getIntExtra("mission", 0).coerceIn(0, Campaign.M.size - 1))
+            G?.speed = it.getIntExtra("speed", 1).coerceIn(1, 3)
+        } else if (it != null && it.getBooleanExtra("campaign", false)) showCampaign()
         if (it != null && it.hasExtra("start")) {
             optDiff = it.getIntExtra("start", 1).coerceIn(0, 2)
             optSize = it.getIntExtra("size", 80)
@@ -502,6 +511,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         startBtn = bigBtn("Загрузка…") { startGame() }
         startBtn.alpha = 0.6f
         c.addView(startBtn)
+        c.addView(midBtn("⚔ Кампания") { showCampaign() })
         contBtn = midBtn("▶ Продолжить") { loadGame() }
         contBtn.visibility = View.GONE
         c.addView(contBtn)
@@ -512,6 +522,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         })
         val ps = arrayOf(
             "<b>Цель:</b> разрушить все здания и войска противника.",
+            "<b>Кампания:</b> пять миссий подряд, у каждой своя задача: построить лагерь, удержать заставу, собрать казну, взять крепость и выиграть генеральное сражение. Задача миссии видна под ресурсами. Следующая миссия открывается после победы.",
             "<b>Выбор:</b> тап по своему отряду или зданию. Двойной тап выбирает всех таких же на экране. Чтобы выделить рамкой, задержите палец и ведите (или нажмите «Рамка»).",
             "<b>Приказы:</b> тап по земле — идти строем, по врагу — атаковать, по лесу, шахте или ферме — добывать (крестьяне). «Натиск» — идти и бить всех по пути.",
             "<b>Карта:</b> одним пальцем — двигать, двумя — масштаб, тап по мини-карте — перейти. В 3D поверните два пальца, чтобы развернуть камеру, а кнопка «🧭» вернёт её на север.",
@@ -622,6 +633,9 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         c.addView(ornament(), LinearLayout.LayoutParams(MP, WC).apply { bottomMargin = dp(6) })
         endStats = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         c.addView(endStats)
+        endNext = midBtn("") { }
+        endNext.visibility = View.GONE
+        c.addView(endNext)
         c.addView(bigBtn("В меню") { toMenu() })
         return screen(c)
     }
@@ -723,6 +737,12 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             setTextColor(GOLD_L); elevation = dp(4).toFloat()
         }
         hud.addView(toastTv, lp(WC, WC, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(44) })
+        // цель миссии кампании: строка под ресурсами
+        objTv = tv("", 12.5f).apply {
+            background = box(0xc8201409.toInt(), GILT, 10f, 1f); setPadding(dp(10), dp(4), dp(10), dp(4)); maxLines = 1
+            setTextColor(GOLD_L); visibility = View.GONE
+        }
+        hud.addView(objTv, lp(WC, WC, Gravity.TOP or Gravity.START).apply { topMargin = dp(44); marginStart = dp(8) })
     }
 
     private fun syncHudButtons(g: Game) {
@@ -738,6 +758,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         val R = g.res[0]
         for (r in 0..3) resTv[r]!!.text = RICON[r] + " " + floor(R[r]).toInt()
         resTv[4]!!.text = "👥 " + g.pop[0] + "/" + g.cap[0]
+        if (g.mission >= 0 && !demo) { objTv.text = "⚑ " + Campaign.status(g); objTv.visibility = View.VISIBLE } else objTv.visibility = View.GONE
         resTv[4]!!.setTextColor(if (g.pop[0] >= g.cap[0]) 0xffff8a7a.toInt() else CREAM)
         for (r in 0..3) resTv[r]!!.setTextColor(if (R[r] < 20) 0xffffb08a.toInt() else CREAM)
     }
@@ -1100,6 +1121,40 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         hud.postDelayed({ if (G === g) toast("Выделите крестьян и постройте ферму и дома") }, 800)
     }
 
+    /** сколько миссий кампании пройдено (следующая по счёту открыта) */
+    private fun campDone() = prefs.getInt("camp", 0).coerceIn(0, Campaign.M.size)
+
+    private fun showCampaign() {
+        if (gv == null) return
+        val done = campDone()
+        val items = Array(Campaign.M.size) { i -> (if (i < done) "✓ " else if (i == done) "▶ " else "🔒 ") + (i + 1) + ". " + Campaign.M[i].title }
+        android.app.AlertDialog.Builder(this).setTitle("Кампания «Знамёна над рекой»")
+            .setItems(items) { _, i ->
+                if (i > done) toast2("Сначала пройдите миссию " + (done + 1))
+                else briefing(i)
+            }
+            .setNegativeButton("Назад", null).show()
+    }
+
+    private fun briefing(i: Int) {
+        val m = Campaign.M[i]
+        android.app.AlertDialog.Builder(this).setTitle((i + 1).toString() + ". " + m.title)
+            .setMessage(m.story + "\n\nЗадача: " + m.goal)
+            .setPositiveButton("В бой") { _, _ -> startMission(i) }
+            .setNegativeButton("Назад") { _, _ -> showCampaign() }.show()
+    }
+
+    private fun toast2(msg: String) = android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+
+    private fun startMission(i: Int) {
+        val v = gv ?: return
+        val m = Campaign.M[i]
+        val g = Game(m.size, m.diff, false, this, v.vwDp, v.vhDp, seed0 = m.seed)
+        Campaign.setup(g, i)
+        launch(g)
+        hud.postDelayed({ if (G === g) toast(m.goal) }, 800)
+    }
+
     private fun launch(g: Game) {
         val v = gv ?: return
         demo = false; autoCam = false
@@ -1237,8 +1292,21 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     override fun ended(win: Boolean) {
         val g = G ?: return
         if (demo) { root.postDelayed({ if (demo && G === g) startDemo() }, 4000); return }
-        endTitle.text = if (win) "Победа!" else "Поражение"
+        endTitle.text = if (g.mission >= 0) (if (win) "Миссия выполнена!" else "Миссия провалена") else if (win) "Победа!" else "Поражение"
         endStats.removeAllViews()
+        endNext.visibility = View.GONE
+        if (g.mission >= 0) {
+            val m = g.mission
+            if (win && m + 1 > campDone()) prefs.edit().putInt("camp", m + 1).apply()
+            val last = m + 1 >= Campaign.M.size
+            if (win && last) endStats.addView(tv("Кампания пройдена. Знамёна над рекой — ваши!", 14f, GOLD_L).apply { setPadding(0, dp(2), 0, dp(4)) })
+            if (!(win && last)) {
+                val next = if (win) m + 1 else m
+                endNext.text = if (win) "Следующая миссия ▶" else "↻ Ещё раз"
+                endNext.setOnClickListener { endM.visibility = View.GONE; startMission(next) }
+                endNext.visibility = View.VISIBLE
+            }
+        }
         val m = (g.time / 60).toInt()
         val sec = (g.time % 60).toInt()
         endStats.addView(tv("Время битвы: $m:${sec.toString().padStart(2, '0')}", 14f).apply { setPadding(0, dp(4), 0, dp(6)) })
