@@ -31,6 +31,7 @@ object Save {
         o.put("explored", b64(g.explored))
         o.put("res", JSONArray().put(dArr(g.res[0])).put(dArr(g.res[1])))
         o.put("price", dArr(g.price))
+        o.put("tech", JSONArray().put(iArr(g.tech[0])).put(iArr(g.tech[1])))
         o.put("stats", JSONArray().apply {
             for (s in g.stats) put(iArr(intArrayOf(s.killed, s.lost, s.trained, s.built, s.gathered)))
         })
@@ -128,6 +129,8 @@ object Save {
             if (!m.dead) for (y in m.ty until m.ty + 2) for (x in m.tx until m.tx + 2) if (g.inB(x, y)) g.occ[g.idx(x, y)] = -m.id
             g.mines.add(m); mineById[m.id] = m
         }
+        // улучшения: до зданий, от них зависит прочность
+        o.optJSONArray("tech")?.let { ta -> for (t in 0..1) { val a = ta.getJSONArray(t); for (i in 0 until minOf(a.length(), TECH.size)) g.tech[t][i] = a.getInt(i) } }
         // здания
         val bById = HashMap<Int, Bld>()
         val bjs = o.getJSONArray("blds")

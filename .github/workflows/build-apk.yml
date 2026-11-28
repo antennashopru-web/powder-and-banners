@@ -100,6 +100,10 @@ jobs:
             adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ei speed 1 --ez walls true --ef zoom 1.25 --ez gfx2d true
             sleep 20
             adb exec-out screencap -p > shots/9-walls-2d.png
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ei speed 1 --ez upgrades true --ef zoom 1.3 --ef yaw 0.3
+            sleep 14
+            adb exec-out screencap -p > shots/10-upgrades.png
             adb logcat -d > shots/logcat.txt || true
 
       - uses: actions/upload-artifact@v4

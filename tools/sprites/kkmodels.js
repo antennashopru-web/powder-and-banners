@@ -13,7 +13,7 @@ async function kkLoad() {
     for (let team = 0; team < 2; team++) KK.chars[n][team] = await loadGLTF('kk/chars/' + n + '.glb');
   }
   const L = async (p) => (await loadGLTF('kk/med/' + p + '.gltf')).scene;
-  const B = ['castle', 'home_A', 'market', 'barracks', 'archeryrange', 'blacksmith', 'tower_A', 'windmill'];
+  const B = ['castle', 'home_A', 'market', 'barracks', 'archeryrange', 'blacksmith', 'tower_A', 'windmill', 'lumbermill', 'church'];
   for (const b of B) KK.med[b] = [await L('buildings/blue/building_' + b + '_blue'), await L('buildings/red/building_' + b + '_red')];
   for (const n of ['tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E', 'resource_stone', 'barrel', 'crate_A_big', 'sack', 'resource_lumber', 'wheelbarrow'])
     KK.med[n] = await L('decoration/' + (/rock|tree/.test(n) ? 'nature/' : 'props/') + n);
@@ -200,6 +200,15 @@ const KK_BLD = {
   stable: (t) => fitModel(KK.med.archeryrange[t], 100, 96),
   foundry: (t) => fitModel(KK.med.blacksmith[t], 98, 96),
   tower: (t) => fitModel(KK.med.tower_A[t], 60, 60),
+  arsenal: (t) => {
+    // мастерская оружейников: дом с пилами, рядом бочки с порохом и ящики
+    const g = fitModel(KK.med.lumbermill[t], 84, 84);
+    g.children[0].position.x -= 6; g.children[0].position.z -= 4;
+    place(g, KK.med.barrel, 8, 34, 26); place(g, KK.med.barrel, 8, 40, 18); place(g, KK.med.barrel, 7, 28, 34);
+    place(g, KK.med.crate_A_big, 11, -34, 30, 0.3); place(g, KK.med.crate_A_big, 9, -24, 36, 0.9);
+    return g;
+  },
+  academy: (t) => fitModel(KK.med.church[t], 92, 96),
   farm: (t) => {
     const g = buildFarm(t);
     // убрать собственные хижину и мельницу, поставить мельницу KayKit

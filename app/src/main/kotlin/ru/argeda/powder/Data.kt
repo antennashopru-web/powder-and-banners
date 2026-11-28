@@ -68,6 +68,7 @@ class BDef(
     val key: String, val name: String, val w: Int, val h: Int, val hp: Int, val cost: IntArray, val time: Double,
     val sight: Int, val desc: String, val pop: Int = 0, val drop: Boolean = false, val trains: IntArray = IntArray(0),
     val atk: Double = 0.0, val range: Double = 0.0, val cd: Double = 0.0, val farm: Boolean = false,
+    val research: IntArray = IntArray(0),
 )
 
 const val B_HALL = 0
@@ -81,6 +82,8 @@ const val B_TOWER = 7
 const val B_LAIR = 8
 const val B_WALL = 9
 const val B_GATE = 10
+const val B_ARSENAL = 11
+const val B_ACADEMY = 12
 fun isWall(type: Int) = type == B_WALL || type == B_GATE
 
 val BLD = arrayOf(
@@ -95,8 +98,31 @@ val BLD = arrayOf(
     BDef("lair", "Логово дракона", 3, 3, 1600, cost(wood = 250, stone = 250), 55.0, 7, "Драконы: летают и жгут огнём", trains = intArrayOf(U_DRAGON)),
     BDef("wall", "Стена", 1, 1, 600, cost(stone = 10), 5.0, 2, "Враг не пройдёт, пока не проломит. Проведите пальцем, чтобы протянуть стену"),
     BDef("gate", "Ворота", 1, 1, 1100, cost(wood = 20, stone = 20), 12.0, 3, "Свои проходят, чужие нет. Можно поставить прямо на стену"),
+    BDef("arsenal", "Арсенал", 3, 3, 1200, cost(wood = 175, stone = 75), 40.0, 6, "Улучшения: клинки, кирасы, порох", research = intArrayOf(0, 1, 2)),
+    BDef("academy", "Академия", 3, 3, 1300, cost(wood = 150, stone = 150, gold = 50), 45.0, 6, "Улучшения: пушки, каменщики, строевая выучка", research = intArrayOf(3, 4, 5)),
 )
-val BUILD_LIST = intArrayOf(B_HOUSE, B_FARM, B_STORE, B_BARRACKS, B_STABLE, B_FOUNDRY, B_LAIR, B_TOWER, B_WALL, B_GATE, B_HALL)
+
+/** улучшение: цена и время растут со ступенью (ступень 2 стоит вдвое дороже) */
+class TDef(val key: String, val name: String, val desc: String, val levels: Int, val cost: IntArray, val time: Double, val icon: String)
+
+const val T_BLADES = 0
+const val T_ARMOR = 1
+const val T_POWDER = 2
+const val T_ARTY = 3
+const val T_MASON = 4
+const val T_DRILL = 5
+
+val TECH = arrayOf(
+    TDef("blades", "Закалённые клинки", "Пикинёры, рейтары и крестьяне бьют сильнее: +15% за ступень", 2, cost(wood = 80, gold = 80), 35.0, "⚔️"),
+    TDef("armor", "Кирасы", "Войска на земле получают меньше урона: −12% за ступень", 2, cost(food = 100, gold = 100), 40.0, "🛡️"),
+    TDef("powder", "Зернистый порох", "Мушкетёры, башни и ратуша стреляют сильнее: +15% за ступень", 2, cost(wood = 60, gold = 120), 40.0, "💥"),
+    TDef("arty", "Артиллерийская школа", "Пушки бьют сильнее и дальше: +20% урона и +12% дальности за ступень", 2, cost(wood = 120, stone = 60, gold = 120), 45.0, "🎯"),
+    TDef("mason", "Каменщики", "Здания и стены прочнее на треть", 1, cost(wood = 100, stone = 200), 45.0, "🧱"),
+    TDef("drill", "Строевая выучка", "Войска ходят быстрее: +10% за ступень", 2, cost(food = 150, gold = 60), 35.0, "🥁"),
+)
+/** в очереди здания: обучение отряда (номер < Q_TECH) или улучшение (Q_TECH + номер улучшения) */
+const val Q_TECH = 100
+val BUILD_LIST = intArrayOf(B_HOUSE, B_FARM, B_STORE, B_BARRACKS, B_STABLE, B_FOUNDRY, B_LAIR, B_ARSENAL, B_ACADEMY, B_TOWER, B_WALL, B_GATE, B_HALL)
 
 class Diff(val mult: Double, val peas: Int, val wave: Int, val grow: Int, val interval: Double, val first: Double, val pace: Double, val cannons: Int, val bonus: Int, val dragons: Int, val walls: Int)
 

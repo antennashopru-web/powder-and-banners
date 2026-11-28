@@ -267,6 +267,19 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                     g.spawnUnit(U_DRAGON, 1, h.x + 260, h.y - 120)
                     g.computePop()
                 }
+                if (it.getBooleanExtra("upgrades", false)) {
+                    // для проверки: арсенал и академия у ратуши, выбран арсенал с его улучшениями
+                    val h = g.blds.first { b -> b.team == 0 && b.type == B_HALL }
+                    var ars: Bld? = null
+                    for (type in intArrayOf(B_ARSENAL, B_ACADEMY)) {
+                        search@ for (r in 4..12) for (dy in -r..r) for (dx in -r..r) {
+                            if (maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy)) != r) continue
+                            if (g.canPlace(type, h.tx + dx, h.ty + dy, 1)) { val b = g.placeBuilding(type, 0, h.tx + dx, h.ty + dy, true); if (type == B_ARSENAL) ars = b; break@search }
+                        }
+                    }
+                    g.res[0] = doubleArrayOf(900.0, 900.0, 900.0, 900.0)
+                    ars?.let { b -> g.enqueueTech(b, T_BLADES); g.tech[0][T_ARMOR] = 1; g.sel = arrayListOf(b); g.uiDirty = true }
+                }
                 if (it.getBooleanExtra("walls", false)) {
                     // для проверки: кольцо стен с воротами вокруг ратуши и отряд врага у стены
                     val h = g.blds.first { b -> b.team == 0 && b.type == B_HALL }
@@ -490,6 +503,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "<b>Отряды 1·2·3:</b> выделите войска и нажмите кнопку с номером — отряд запомнится. Потом одно нажатие выбирает его, второе подряд — переносит к нему камеру. Удержание — запомнить заново.",
             "<b>Сохранение:</b> в паузе есть «Сохранить игру», а при сворачивании игра сохраняется сама. Продолжить можно из главного меню.",
             "<b>Войска:</b> пикинёры держат конницу, мушкетёры бьют залпом издалека, рейтары быстры, пушки рушат здания и строи.",
+            "<b>Улучшения:</b> Арсенал изучает закалённые клинки, кирасы и зернистый порох, Академия учит артиллеристов, каменщиков и строевой выучке. Улучшение действует на все ваши войска сразу, у многих две ступени.",
             "<b>Стены и ворота:</b> выберите «Стена» и проведите пальцем по земле: стена тянется по прямой, по 10 камня за кусок. Ворота пропускают только своих, их можно поставить прямо на стену. Враг стену не обходит, а проламывает, пушки делают это быстрее всех.",
             "<b>Драконы:</b> стройте логово дракона. Драконы летают над лесом и водой и жгут огнём всё вокруг цели. Пикинёры, рейтары и пушки до них не достают: сбивают их мушкетёры, башни и ратуша.",
         )
@@ -796,7 +810,9 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 val hpT = "${ceil(e.hp).toInt()}/${e.maxhp.toInt()}"
                 val ic = spr!!.bldIcons[e.type]
                 if (!e.built) setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, "Строится: ${floor(e.progress / d.time * 100).toInt()}%")
-                else if (e.queue.isNotEmpty()) setInfo(ic, nm, e.hp / e.maxhp, hpT, e.qt / UNIT[e.queue[0]].time, if (e.popBlocked) "Нужны дома!" else "Обучение: " + UNIT[e.queue[0]].name)
+                else if (e.queue.isNotEmpty()) setInfo(ic, nm, e.hp / e.maxhp, hpT, e.qt / g.qTime(e, e.queue[0]), if (e.popBlocked) "Нужны дома!"
+                    else if (e.queue[0] >= Q_TECH) "Изучается: " + TECH[e.queue[0] - Q_TECH].name else "Обучение: " + UNIT[e.queue[0]].name)
+                else if (d.research.isNotEmpty() && e.team == 0) setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, "Изучено: " + d.research.joinToString(" · ") { t -> TECH[t].icon + " ${g.tech[0][t]}/${TECH[t].levels}" })
                 else if (e.type == B_STORE && e.team == 0) setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, "Торговля: купить или продать по 100")
                 else setInfo(ic, nm, e.hp / e.maxhp, hpT, -1.0, d.desc)
             } else if (e is Mine) {
@@ -811,7 +827,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
         if (sig == uiSig && !g.uiDirty) {
             val b = sel.firstOrNull()
-            if (b is Bld && b.queue.isNotEmpty()) qBar?.scaleX = (b.qt / UNIT[b.queue[0]].time).toFloat()
+            if (b is Bld && b.queue.isNotEmpty()) qBar?.scaleX = (b.qt / g.qTime(b, b.queue[0])).toFloat()
             return
         }
         uiSig = sig; g.uiDirty = false
@@ -847,9 +863,22 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                         else sfx(S_CLICK, Double.NaN, Double.NaN)
                     }
                 }
-                b.queue.forEachIndexed { k, t -> qItem(spr!!.unitIcons[t], if (k == 0) b.qt / UNIT[t].time else -1.0) {
-                    if (k < b.queue.size) { val tt = b.queue.removeAt(k); g.pay(0, UNIT[tt].cost, -1.0); if (k == 0) b.qt = 0.0 }
-                } }
+            }
+            if (b.built && d.research.isNotEmpty()) {
+                for (t in d.research) {
+                    val next = g.techNext(0, t)
+                    val done = next >= TECH[t].levels
+                    actBtn(techIcon(t), TECH[t].name + if (TECH[t].levels > 1 && !done) " ${next + 1}" else "", if (done) IntArray(4) else g.techCost(0, t), 0) {
+                        if (done) toast(TECH[t].name + ": изучено полностью")
+                        else if (!g.enqueueTech(b, t)) toast(if (b.queue.size >= 6) "Очередь заполнена" else "Не хватает: " + g.missing(g.techCost(0, t)))
+                        else { sfx(S_CLICK, Double.NaN, Double.NaN); toast(TECH[t].desc) }
+                    }
+                }
+            }
+            if (b.built && b.queue.isNotEmpty()) b.queue.forEachIndexed { k, t ->
+                qItem(if (t >= Q_TECH) techIcon(t - Q_TECH) else spr!!.unitIcons[t], if (k == 0) b.qt / g.qTime(b, t) else -1.0) {
+                    if (k < b.queue.size) { val tt = b.queue.removeAt(k); g.refund(b, tt); if (k == 0) b.qt = 0.0 }
+                }
             }
             if (b.built && b.type == B_STORE) {
                 for (r in 0..2) {
@@ -929,6 +958,18 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         }, lp(WC, WC, Gravity.TOP or Gravity.END).apply { topMargin = dp(2); marginEnd = dp(3) })
         if (!G!!.canAfford(0, cost)) fl.alpha = 0.45f
         acts.addView(fl, actLp())
+    }
+
+    private val techIcons = arrayOfNulls<Bitmap>(TECH.size)
+    /** значок улучшения: эмодзи на тёмном круге с золотым кантом */
+    private fun techIcon(t: Int): Bitmap = techIcons[t] ?: Bitmap.createBitmap(72, 72, Bitmap.Config.ARGB_8888).also { bm ->
+        val c = android.graphics.Canvas(bm)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = 0xff2a1c10.toInt(); c.drawCircle(36f, 36f, 33f, p)
+        p.style = android.graphics.Paint.Style.STROKE; p.strokeWidth = 3f; p.color = 0xffe8b84a.toInt(); c.drawCircle(36f, 36f, 33f, p)
+        p.style = android.graphics.Paint.Style.FILL; p.textSize = 38f; p.textAlign = android.graphics.Paint.Align.CENTER
+        c.drawText(TECH[t].icon, 36f, 36f - (p.descent() + p.ascent()) / 2, p)
+        techIcons[t] = bm
     }
 
     private fun qItem(icon: Bitmap?, frac: Double, f: () -> Unit) {

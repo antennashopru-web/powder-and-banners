@@ -411,7 +411,8 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             val d = hyp((pr[0] - sx).toDouble(), (pr[1] - sy).toDouble()).toFloat() / max(0.6f, min(1.6f, pr[2]))
             if (d < bd) { bd = d; best = u }
         }
-        if (best != null) return best
+        // здание под пальцем важнее отряда рядом с ним: отряд берётся, только если палец прямо на нём
+        if (best != null && bd < 9f) return best
         for (b in G.blds) {
             if (b.dead || !G.seen(b)) continue
             val top = modelTop[Models3D.M_BLD + b.type].toDouble()
@@ -423,6 +424,7 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             val ins = (r - l) * 0.12f
             if (sx >= l + ins && sx <= r - ins && sy >= t && sy <= bt) return b
         }
+        if (best != null) return best
         for (m in G.mines) {
             if (m.dead) continue
             if (wx >= m.tx * TILE - 6 && wx <= (m.tx + 2) * TILE + 6 && wy >= m.ty * TILE - 6 && wy <= (m.ty + 2) * TILE + 6)
