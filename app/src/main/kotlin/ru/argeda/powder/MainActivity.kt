@@ -175,7 +175,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private lateinit var splash: View
     private val splashT0 = SystemClock.uptimeMillis()
 
-    /** заставка бренда: ARGEDA — сделаем мир лучше */
+    /** заставка с названием игры */
     private fun buildSplash() {
         val f = FrameLayout(this)
         f.background = GradientDrawable().apply {
@@ -185,15 +185,15 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         }
         f.isClickable = true
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-        val logo = tv("ARGEDA", 46f, GOLD_L, true).apply {
-            letterSpacing = 0.32f; gravity = Gravity.CENTER; setSingleLine(true); setPadding(dp(16), dp(4), 0, dp(4))
+        val logo = tv("Порох и Знамёна", 38f, GOLD_L, true).apply {
+            letterSpacing = 0.06f; gravity = Gravity.CENTER; setSingleLine(true); setPadding(0, dp(4), 0, dp(4))
             setShadowLayer(dp(10).toFloat(), 0f, 0f, 0xaaffa030.toInt())
         }
         col.addView(logo, LinearLayout.LayoutParams(MP, WC))
         col.addView(View(this).apply { background = grad(0x00d9a84a, 0x00d9a84a, 0f).apply {
             orientation = GradientDrawable.Orientation.LEFT_RIGHT; colors = intArrayOf(0x00d9a84a, GILT, 0x00d9a84a)
         } }, LinearLayout.LayoutParams(dp(220), dp(2)).apply { topMargin = dp(10); bottomMargin = dp(10) })
-        col.addView(tv("сделаем мир лучше", 19f, CREAM).apply { gravity = Gravity.CENTER; setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.08f; alpha = 0.9f })
+        col.addView(tv("стратегия эпохи пик и мушкетов", 17f, CREAM).apply { gravity = Gravity.CENTER; setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.08f; alpha = 0.9f })
         f.addView(col, lp(MP, WC, Gravity.CENTER))
         col.alpha = 0f; col.scaleX = 0.92f; col.scaleY = 0.92f
         col.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(900).start()
@@ -515,6 +515,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         contBtn = midBtn("▶ Продолжить") { loadGame() }
         contBtn.visibility = View.GONE
         c.addView(contBtn)
+        c.addView(midBtn("⟳ Обновить игру") { Updater.check(this, true) })
         val help = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         c.addView(tv("Как играть", 14f).apply {
             paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG; alpha = 0.85f; setPadding(dp(8), dp(12), dp(8), dp(4)); isClickable = true
@@ -550,13 +551,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             alpha = 0.75f; setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0)
         })
         c.addView(help, LinearLayout.LayoutParams(MP, WC))
-        c.addView(tv("ARGEDA — сделаем мир лучше", 12.5f, GILT).apply {
-            setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.06f; alpha = 0.85f; setPadding(0, dp(8), 0, 0)
-        })
-        c.addView(tv("Сборка " + Updater.installed(this) + " · проверить обновление", 12.5f, GILT).apply {
-            alpha = 0.85f; setPadding(0, dp(8), 0, dp(4)); paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
-            setOnClickListener { Updater.check(this@MainActivity, true) }
-        })
+        c.addView(tv("Установлена сборка " + Updater.installed(this), 12.5f, GILT).apply { alpha = 0.85f; setPadding(0, dp(8), 0, dp(4)) })
         menu = screen(c, true)
         root.addView(menu, lp(MP, MP))
     }
