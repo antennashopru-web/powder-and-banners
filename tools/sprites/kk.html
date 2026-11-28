@@ -4,8 +4,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-window.THREE = THREE; window.SkeletonUtils = SkeletonUtils;
+import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+window.THREE = THREE; window.SkeletonUtils = SkeletonUtils; window.SimplifyModifier = SimplifyModifier; window.BufferGeometryUtils = BufferGeometryUtils;
 const loader = new GLTFLoader();
 window.loadGLTF = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
-const s = document.createElement('script'); s.src = 'models.js'; s.onload = () => { const k = document.createElement('script'); k.src = 'kkmodels.js'; k.onload = () => { window.READY = true; }; document.body.appendChild(k); }; document.body.appendChild(s);
+const s = document.createElement('script'); s.src = 'models.js'; s.onload = () => { const k = document.createElement('script'); k.src = 'kkmodels.js'; k.onload = () => { const d = document.createElement('script'); d.src = 'dragon.js'; d.onload = () => { const w = document.createElement('script'); w.src = 'walls.js'; w.onload = () => { const q = document.createElement('script'); q.src = 'troops.js'; q.onload = () => { const u = document.createElement('script'); u.src = 'uniforms.js'; u.onload = () => { const f = document.createElement('script'); f.src = 'skf.js'; f.onload = () => { const z = document.createElement('script'); z.src = 'soldier.js'; z.onload = () => { const t = document.createElement('script'); t.src = 'skftrees.js'; t.onload = () => { window.READY = true; }; document.body.appendChild(t); }; document.body.appendChild(z); }; document.body.appendChild(f); }; document.body.appendChild(u); }; document.body.appendChild(q); }; document.body.appendChild(w); }; document.body.appendChild(d); }; document.body.appendChild(k); }; document.body.appendChild(s);
 </script></body></html>

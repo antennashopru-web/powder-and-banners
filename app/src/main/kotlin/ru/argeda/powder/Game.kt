@@ -34,13 +34,21 @@ const val STEP = 1.0 / 30
 private class FieldEntry(val ver: Int, val d: DoubleArray, var used: Double)
 
 /** Весь мир и вся логика игры. Не зависит от Android: можно гонять без экрана (ИИ против ИИ). */
-class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoHost, vw: Double = 800.0, vh: Double = 450.0) {
+/** blank = true: пустой мир без карты и войск, его заполняет загрузка сохранения (Save.kt) */
+class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoHost, vw: Double = 800.0, vh: Double = 450.0,
+           blank: Boolean = false, seed0: Int = -1) {
     val W = size
     val H = size
-    val seed = (rnd() * 1e9).toInt()
+    val seed = if (seed0 >= 0) seed0 else (rnd() * 1e9).toInt()
     val terrain = ByteArray(W * H)
     val wood = IntArray(W * H)
     val occ = IntArray(W * H)
+    /** стены и ворота: 0 нет, 1+команда стена, 4+команда ворота */
+    val barrier = ByteArray(W * H)
+    /** мостики осадных башен через чужие стены: бит на команду */
+    val bridge = ByteArray(W * H)
+    /** чья команда сейчас ищет путь: свои ворота для неё проходимы, чужие стены можно проломить */
+    var walkTeam = -1
     var units = ArrayList<Unt>()
     var blds = ArrayList<Bld>()
     val mines = ArrayList<Mine>()
@@ -59,6 +67,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     val pop = IntArray(2)
     val cap = IntArray(2)
     val stats = arrayOf(Stats(), Stats())
+    /** изученные ступени улучшений у каждой команды */
+    val tech = arrayOf(IntArray(TECH.size), IntArray(TECH.size))
     var sel = ArrayList<Ent>()
     var placing: Placing? = null
     var amove = false
@@ -72,6 +82,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     var paused = false
     var over = false
     var winner = -1
+    /** номер миссии кампании или -1 для обычной битвы */
+    var mission = -1
     var fogT = 0.0
     var aiT = 0.0
     var endT = 0.0
@@ -84,7 +96,12 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     private var uNext = IntArray(4096)
     val ai = arrayOfNulls<AI>(2)
 
-    init {
+    // рынок: цена 100 единиц еды, дерева, камня в золоте (для игрока)
+    val price = doubleArrayOf(PRICE0[FOOD], PRICE0[WOOD], PRICE0[STONE])
+
+    init { if (!blank) newWorld() }
+
+    private fun newWorld() {
         val P = DIFF[diff]
         res[1][FOOD] += P.bonus.toDouble(); res[1][WOOD] += P.bonus.toDouble(); res[1][GOLD] += (P.bonus shr 1).toDouble()
         genMap()
@@ -102,7 +119,29 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
 
     fun idx(tx: Int, ty: Int) = ty * W + tx
     fun inB(tx: Int, ty: Int) = tx >= 0 && ty >= 0 && tx < W && ty < H
-    fun walk(i: Int): Boolean { val t = terrain[i].toInt(); return (t == T_GRASS || t == T_SAND) && occ[i] == 0 }
+    fun walk(i: Int): Boolean {
+        val t = terrain[i].toInt()
+        if (t != T_GRASS && t != T_SAND) return false
+        val o = occ[i]
+        return o == 0 || (o > 0 && walkTeam >= 0 && (barrier[i].toInt() == 4 + walkTeam || (barrier[i].toInt() != 0 && (bridge[i].toInt() shr walkTeam and 1) == 1)))
+    }
+    fun barTeam(i: Int): Int { val v = barrier[i].toInt(); return if (v == 0) -1 else if (v >= 4) v - 4 else v - 1 }
+    /** чужая стена или ворота: путь через неё возможен, если проломить */
+    fun breakable(i: Int): Boolean = walkTeam >= 0 && barrier[i].toInt() != 0 && barTeam(i) != walkTeam
+    /** соседние стены/ворота той же команды: биты 1 восток, 2 юг, 4 запад, 8 север */
+    fun wallLinks(b: Bld): Int = wallLinksAt(b.tx, b.ty, b.team)
+    fun wallLinksAt(tx: Int, ty: Int, team: Int): Int {
+        var m = 0
+        for (k in 0 until 4) {
+            val nx = tx + DX4[k]
+            val ny = ty + DY4[k]
+            if (inB(nx, ny) && barTeam(idx(nx, ny)) == team) m = m or (1 shl k)
+        }
+        return m
+    }
+    /** ворота стоят поперёк, если стены у них только с севера и юга */
+    fun gateVertical(b: Bld): Boolean = gateVerticalAt(b.tx, b.ty, b.team)
+    fun gateVerticalAt(tx: Int, ty: Int, team: Int): Boolean { val m = wallLinksAt(tx, ty, team); return (m and 10) != 0 && (m and 5) == 0 }
     fun walkXY(tx: Int, ty: Int) = inB(tx, ty) && walk(ty * W + tx)
     fun walkPx(x: Double, y: Double) = walkXY(fl(x / TILE), fl(y / TILE))
 
@@ -220,9 +259,10 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         val b = Bld(type)
         b.id = nextId++; b.team = team; b.tx = tx; b.ty = ty; b.w = d.w; b.h = d.h
         b.x = (tx + d.w / 2.0) * TILE; b.y = (ty + d.h / 2.0) * TILE
-        b.hp = if (built) d.hp.toDouble() else max(1.0, d.hp * 0.1); b.maxhp = d.hp.toDouble()
+        b.maxhp = d.hp * hpMul(team); b.hp = if (built) b.maxhp else max(1.0, b.maxhp * 0.1)
         b.built = built; b.progress = if (built) d.time else 0.0; b.r = d.w * TILE / 2.0
         for (j in ty until ty + d.h) for (i in tx until tx + d.w) { val k = idx(i, j); occ[k] = b.id; terrain[k] = T_GRASS.toByte(); wood[k] = 0 }
+        if (isWall(type)) barrier[idx(tx, ty)] = ((if (type == B_GATE) 4 else 1) + team).toByte()
         blds.add(b); byId[b.id] = b; fieldVer++; miniDirty = true
         host.chunksDirty(tx, ty, d.w, d.h)
         for (u in units) {
@@ -286,6 +326,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         for (j in ty until ty + d.h) for (i in tx until tx + d.w) {
             if (!inB(i, j)) return false
             val k = idx(i, j)
+            // ворота можно поставить на свою стену
+            if (type == B_GATE && barrier[k].toInt() == 1 + team) continue
             if (occ[k] != 0) return false
             val t = terrain[k].toInt()
             if (t != T_GRASS && t != T_SAND) return false
@@ -296,11 +338,12 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
 
     // ============================================================ поля путей
     private fun getField(g: Goal): DoubleArray {
-        val f = fields[g.key]
+        val key = g.key + "|" + walkTeam
+        val f = fields[key]
         if (f != null && f.ver == fieldVer) { f.used = time; return f.d }
         val d = computeField(g.seeds)
-        fields[g.key] = FieldEntry(fieldVer, d, time)
-        if (fields.size > 90) {
+        fields[key] = FieldEntry(fieldVer, d, time)
+        if (fields.size > 120) {
             var ok: String? = null
             var ot = 1e18
             for ((k, v) in fields) if (v.used < ot) { ot = v.used; ok = k }
@@ -328,13 +371,18 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                 val ny = y + dy
                 if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
                 val ni = ny * W + nx
-                if (!walk(ni)) continue
+                var extra = 0.0
+                if (!walk(ni)) {
+                    // чужую стену можно проломить: путь через неё дороже
+                    if (dx != 0 && dy != 0 || !breakable(ni)) continue
+                    extra = 4.0 + (byId[occ[ni]]?.hp ?: 600.0) / 60
+                }
                 if (dx != 0 && dy != 0) {
                     val a = y * W + nx
                     val b = ny * W + x
                     if (!(walk(a) || isSeed[a]) || !(walk(b) || isSeed[b])) continue
                 }
-                val nc = c + DC[k]
+                val nc = c + DC[k] + extra
                 if (nc < d[ni]) { d[ni] = nc; hp.push(ni, nc) }
             }
         }
@@ -393,6 +441,15 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         var dy = gy - u.y
         val dist = hyp(dx, dy)
         if (dist <= g.arrive + (if (rect != null) u.r else 0.0)) { u.goal = null; return true }
+        if (UNIT[u.type].fly) {
+            // летит напрямик над лесом, водой и домами
+            val step = min(spdOf(u) * dt, dist)
+            u.x = clamp(u.x + dx / dist * step, 4.0, W * TILE - 4.0); u.y = clamp(u.y + dy / dist * step, 4.0, H * TILE - 4.0)
+            if (abs(dx) > 0.5) u.face = if (dx > 0) 1 else -1
+            if (dist > 2) u.dir = dirOf(dx, dy)
+            u.moving = true; u.anim += dt
+            return false
+        }
         var tx = gx
         var ty = gy
         var prog = dist
@@ -404,6 +461,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             prog = f[i] * TILE
             var best = f[i]
             var bi = -1
+            var wall = -1
             for (k in 0 until 8) {
                 val ddx = DX[k]
                 val ddy = DY[k]
@@ -413,8 +471,13 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                 val ni = ny * W + nx
                 if (f[ni] < best && walk(ni)) {
                     if (ddx != 0 && ddy != 0 && (!walkXY(ux + ddx, uy) || !walkXY(ux, uy + ddy))) continue
-                    best = f[ni]; bi = ni
-                }
+                    best = f[ni]; bi = ni; wall = -1
+                } else if (f[ni] < best && k < 4 && breakable(ni)) { best = f[ni]; bi = -1; wall = ni }
+            }
+            if (wall >= 0) {
+                // дорогу преграждает чужая стена: ломаем её
+                val wb = byId[occ[wall]]
+                if (wb != null && !wb.dead && u.target !== wb) { u.target = wb; u.goal = null; return false }
             }
             if (bi < 0) { if (f[i] >= 1e8) { u.goal = null; return true } }
             else { tx = (bi % W + 0.5) * TILE; ty = (bi / W + 0.5) * TILE }
@@ -423,7 +486,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         else { g.stuckT += dt; if (g.stuckT > (if (dist < 40) 1.0 else 3.0)) { u.goal = null; return true } }
         dx = tx - u.x; dy = ty - u.y
         val L = hyp(dx, dy).let { if (it == 0.0) 1.0 else it }
-        val step = min(UNIT[u.type].spd * dt, L)
+        val step = min(spdOf(u) * dt, L)
         moveBy(u, dx / L * step, dy / L * step)
         if (abs(dx) > 0.5) u.face = if (dx > 0) 1 else -1
         if (L > 2) u.dir = dirOf(dx, dy)
@@ -444,7 +507,83 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         }
     }
 
-    fun findEnemyAt(x: Double, y: Double, team: Int, radius: Double, unitsOnly: Boolean): Ent? {
+    /** кто может бить летающих: стрелки (кроме пушек), башни и ратуша */
+    // ============================================================ улучшения
+    fun lvl(team: Int, t: Int) = if (team in 0..1) tech[team][t] else 0
+    fun atkBonus(u: Unt): Double = (when (u.type) {
+        U_PEASANT, U_PIKE, U_CAV, U_HERO -> 1 + 0.15 * lvl(u.team, T_BLADES)
+        U_MUSKET, U_GREN, U_DRAGOON -> 1 + 0.15 * lvl(u.team, T_POWDER)
+        U_CANNON, U_MORTAR -> 1 + 0.2 * lvl(u.team, T_ARTY)
+        else -> 1.0
+    }) * (if (u.inspired) 1.25 else 1.0)
+    fun armorMul(t: Unt): Double = (if (t.type == U_PEASANT || UNIT[t.type].fly) 1.0 else 1 - 0.12 * lvl(t.team, T_ARMOR)) * (if (t.inspired) 0.85 else 1.0)
+    /** герой жив или уже учится */
+    fun hasHero(team: Int) = units.any { it.team == team && !it.dead && it.type == U_HERO } || blds.any { it.team == team && !it.dead && it.queue.contains(U_HERO) }
+    private var auraT = 0.0
+    fun nearestEnemyWall(u: Unt, r: Double): Bld? = blds.filter { !it.dead && it.team != u.team && it.team >= 0 && isWall(it.type) && it.built }
+        .minByOrNull { hyp(it.x - u.x, it.y - u.y) }?.takeIf { hyp(it.x - u.x, it.y - u.y) < r }
+    private var bridgeT = 0.0
+    private val bridgeOn = ArrayList<Int>()
+    /** стоящая у чужой стены башня перекидывает мостик на соседние куски стены */
+    private fun updateBridges(dt: Double) {
+        bridgeT -= dt; if (bridgeT > 0) return
+        bridgeT = 0.3
+        val now = ArrayList<Int>()
+        for (u in units) {
+            if (u.type != U_SIEGE || u.dead || u.moving) continue
+            val tx = fl(u.x / TILE); val ty = fl(u.y / TILE)
+            for (j in ty - 1..ty + 1) for (i in tx - 1..tx + 1) {
+                if (!inB(i, j)) continue
+                val k = idx(i, j)
+                if (barrier[k].toInt() == 0 || barTeam(k) == u.team) continue
+                if (hyp((i + 0.5) * TILE - u.x, (j + 0.5) * TILE - u.y) > TILE * 1.25) continue
+                now.add(k or (u.team shl 28))
+            }
+        }
+        if (now.size == bridgeOn.size && now.containsAll(bridgeOn)) return
+        for (k in bridgeOn) bridge[k and 0xFFFFFFF] = 0
+        for (k in now) { val i = k and 0xFFFFFFF; bridge[i] = (bridge[i].toInt() or (1 shl (k ushr 28))).toByte() }
+        bridgeOn.clear(); bridgeOn.addAll(now)
+        fieldVer++
+    }
+    private fun updateAura(dt: Double) {
+        auraT -= dt; if (auraT > 0) return
+        auraT = 0.4
+        val heroes = units.filter { it.type == U_HERO && !it.dead }
+        for (u in units) u.inspired = u.type != U_HERO && heroes.any { h -> h.team == u.team && hyp(h.x - u.x, h.y - u.y) < HERO_AURA }
+        for (h in heroes) if (h.hp < h.maxhp) h.hp = min(h.maxhp, h.hp + 4 * 0.4)
+    }
+    fun spdOf(u: Unt): Double = UNIT[u.type].spd * (if (u.type == U_PEASANT) 1.0 else 1 + 0.1 * lvl(u.team, T_DRILL))
+    fun rangeOf(u: Unt): Double = UNIT[u.type].range * (if (u.type == U_CANNON || u.type == U_MORTAR) 1 + 0.12 * lvl(u.team, T_ARTY) else 1.0)
+    fun hpMul(team: Int): Double = 1 + 0.33 * lvl(team, T_MASON)
+    /** ступень, которая будет следующей с учётом уже стоящих в очередях */
+    fun techNext(team: Int, t: Int): Int = tech[team][t] + blds.sumOf { b -> if (b.team == team && !b.dead) b.queue.count { it == Q_TECH + t } else 0 }
+    fun techCost(team: Int, t: Int, level: Int = techNext(team, t) + 1): IntArray = IntArray(4) { TECH[t].cost[it] * level }
+    fun qTime(b: Bld, q: Int): Double = if (q >= Q_TECH) TECH[q - Q_TECH].time * (tech[b.team][q - Q_TECH] + 1) else UNIT[q].time
+    /** вернуть цену пункта, уже убранного из очереди (за улучшение — цену самой дорогой ступени в очереди) */
+    fun refund(b: Bld, q: Int) { if (q >= Q_TECH) pay(b.team, techCost(b.team, q - Q_TECH), -1.0) else pay(b.team, UNIT[q].cost, -1.0) }
+
+    fun enqueueTech(b: Bld, t: Int): Boolean {
+        if (b.queue.size >= 6 || techNext(b.team, t) >= TECH[t].levels) return false
+        val c = techCost(b.team, t)
+        if (!canAfford(b.team, c)) return false
+        pay(b.team, c); b.queue.add(Q_TECH + t)
+        return true
+    }
+
+    private fun finishTech(team: Int, t: Int) {
+        tech[team][t]++
+        if (t == T_MASON) for (b in blds) if (b.team == team && !b.dead) {
+            val k = hpMul(team) / (1 + 0.33 * (tech[team][t] - 1))
+            b.maxhp *= k; b.hp *= k
+        }
+        if (team == 0) { host.toast("Изучено: " + TECH[t].name); host.sfx(S_DONE, Double.NaN, Double.NaN) }
+    }
+
+    fun canHitAir(u: Unt) = UNIT[u.type].ranged && u.type != U_SIEGE && u.type != U_CANNON && u.type != U_MORTAR && u.type != U_GREN
+    fun flies(e: Ent?) = e is Unt && UNIT[e.type].fly
+
+    fun findEnemyAt(x: Double, y: Double, team: Int, radius: Double, unitsOnly: Boolean, air: Boolean = true): Ent? {
         val r = ceil(radius / TILE).toInt()
         val cx = fl(x / TILE)
         val cy = fl(y / TILE)
@@ -459,7 +598,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             while (k >= 0) {
                 val v = units[k]
                 k = uNext[k]
-                if (v.team == team || v.dead) continue
+                if (v.team == team || v.dead || (!air && UNIT[v.type].fly)) continue
                 val d2 = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y)
                 if (d2 < bd) { bd = d2; best = v }
             }
@@ -468,7 +607,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         var bb: Ent? = null
         var bbd = radius
         for (b in blds) {
-            if (b.team == team || b.dead) continue
+            // стены сами по себе не цель: их ломают, только когда они мешают пройти
+            if (b.team == team || b.dead || isWall(b.type)) continue
             val d = distRectPt(x, y, entRect(b))
             if (d < bbd) { bbd = d; bb = b }
         }
@@ -482,10 +622,13 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (blds.any { it.dead }) blds.removeAll { it.dead }
         computePop()
         rebuildHash()
-        for (k in units.indices) { val u = units[k]; if (!u.dead) updateUnit(u, dt) }
+        for (k in units.indices) { val u = units[k]; if (!u.dead) { walkTeam = u.team; updateUnit(u, dt) } }
         separate(dt)
+        walkTeam = -1
         for (k in blds.indices) { val b = blds[k]; if (!b.dead) updateBuilding(b, dt) }
         updateProj(dt)
+        updateAura(dt)
+        updateBridges(dt)
         for (f in fx) { f.t += dt; if (f.vx != 0.0 || f.vy != 0.0) { f.x += f.vx * dt; f.y += f.vy * dt } }
         fx.removeAll { it.t >= it.life }
         for (d in decals) d.t += dt
@@ -493,6 +636,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         for (m in markers) m.t += dt
         markers.removeAll { it.t >= 0.8 }
         ping?.let { it.t -= dt; if (it.t <= 0) ping = null }
+        for (r in 0..2) price[r] += (PRICE0[r] - price[r]) * min(1.0, dt * 0.004)
         if (sel.isNotEmpty() && sel.any { it.dead }) sel.removeAll { it.dead }
         fogT -= dt; if (fogT <= 0) { fogT = 0.25; updateFog() }
         aiT -= dt; if (aiT <= 0) { aiT = 1.0; if (ai[1] != null) aiTick(1); if (ai[0] != null) aiTick(0) }
@@ -511,21 +655,25 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         u.scanT -= dt
         if (u.scanT <= 0) {
             u.scanT = 0.35 + rnd() * 0.2
-            if (u.type != U_PEASANT && u.cmd != CMD_MOVE) {
+            if (u.type == U_SIEGE) {
+                // башня ищет только чужие стены
+                if (u.target == null && u.cmd != CMD_MOVE) nearestEnemyWall(u, d.sight * TILE.toDouble())?.let { u.target = it; u.goal = null }
+            } else if (u.type != U_PEASANT && u.cmd != CMD_MOVE) {
                 val t = u.target
                 if (t == null) {
-                    val e = findEnemyAt(u.x, u.y, u.team, d.sight * TILE.toDouble(), false)
+                    val e = findEnemyAt(u.x, u.y, u.team, d.sight * TILE.toDouble(), false, canHitAir(u))
                     if (e != null) { u.target = e; u.goal = null }
                 } else if (t.kind == K_B && u.cmd != CMD_ATTACK) {
-                    val e = findEnemyAt(u.x, u.y, u.team, d.sight * TILE.toDouble(), true)
+                    val e = findEnemyAt(u.x, u.y, u.team, d.sight * TILE.toDouble(), true, canHitAir(u))
                     if (e != null) { u.target = e; u.goal = null }
                 }
             }
         }
+        if (d.fly && !u.moving) u.anim += dt
         if (u.target != null) doCombat(u, dt)
         else if (u.task != null) peasantTask(u, dt)
         else if (u.goal != null && steer(u, dt) && (u.cmd == CMD_MOVE || u.cmd == CMD_AMOVE)) u.cmd = CMD_NONE
-        if (u.moving && !auto && fx.size < 600 && rnd() < (if (u.type == U_CAV) 0.35 else if (u.type == U_CANNON) 0.2 else 0.03)) {
+        if (u.moving && !auto && fx.size < 600 && rnd() < (if (u.type == U_CAV || u.type == U_DRAGOON) 0.35 else if (u.type == U_CANNON || u.type == U_MORTAR || u.type == U_SIEGE) 0.2 else 0.03)) {
             val f = Fx(FX_DUST, u.x - u.face * 6 + (rnd() - 0.5) * 6, u.y - 1, 0.7 + rnd() * 0.4)
             f.vx = -u.face * 6.0; f.vy = -4.0
             f.r = if (u.type == U_PEASANT || u.type == U_PIKE || u.type == U_MUSKET) 1.5 else 2.5
@@ -539,16 +687,19 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (t !is Unt) return 1.0
         var m = 1.0
         if (d.vsCav > 0 && UNIT[t.type].cav) m = d.vsCav
-        if (a.type == U_CAV && (t.type == U_MUSKET || t.type == U_CANNON)) m = 1.4
-        if (a.type == U_PIKE && t.type == U_CANNON) m = 1.5
+        if (a.type == U_CAV && (t.type == U_MUSKET || t.type == U_CANNON || t.type == U_MORTAR || t.type == U_GREN)) m = 1.4
+        if (a.type == U_PIKE && (t.type == U_CANNON || t.type == U_MORTAR)) m = 1.5
+        if (t.type == U_SIEGE && (a.type == U_CANNON || a.type == U_MORTAR)) m = 1.6
+        if (a.type == U_GREN && t is Unt && !UNIT[t.type].cav) m = 1.2
         return m
     }
 
     private fun doCombat(u: Unt, dt: Double) {
         val t = u.target!!
         val d = UNIT[u.type]
+        if (flies(t) && !canHitAir(u)) { u.target = null; u.goal = null; if (u.cmd == CMD_ATTACK) u.cmd = CMD_NONE; return }
         val dist = distTo(u, t)
-        if (dist <= d.range) {
+        if (dist <= rangeOf(u)) {
             u.goal = null
             if (abs(t.x - u.x) > 1) u.face = if (t.x > u.x) 1 else -1
             u.dir = dirOf(t.x - u.x, t.y - u.y)
@@ -564,7 +715,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         u.chaseT -= dt
         if (u.goal == null || u.chaseT <= 0) {
             u.chaseT = 0.6
-            val ar = max(2.0, d.range - 8)
+            val ar = max(2.0, rangeOf(u) - 8)
             if (t.kind == K_B) goalEnt(u, t, ar) else goalPt(u, t.x, t.y, ar)
         }
         steer(u, dt)
@@ -590,8 +741,11 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
 
     private fun attack(u: Unt, t: Ent, dist: Double) {
         val d = UNIT[u.type]
-        val m = dmgMult(u, t)
-        if (u.type == U_MUSKET) {
+        val m = dmgMult(u, t) * atkBonus(u)
+        if (u.type == U_SIEGE) {
+            // башня не бьёт: она встала у стены и держит мостик
+            return
+        } else if (u.type == U_MUSKET || u.type == U_DRAGOON) {
             val mx = u.x + u.face * 12
             val my = u.y - 10
             flash(mx, my, 0.12)
@@ -600,12 +754,50 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             host.sfx(S_SHOT, u.x, u.y)
             val hitP = clamp(0.95 - dist / 450, 0.45, 0.95)
             if (rnd() < hitP) damage(t, d.atk * m, u)
+        } else if (u.type == U_DRAGON) {
+            // огненное дыхание: струя огня до цели, ожоги всем рядом на земле
+            val a = Math.atan2(t.y - u.y, t.x - u.x)
+            val sx = u.x + Math.cos(a) * 22
+            val sy = u.y + Math.sin(a) * 22
+            for (i in 0..6) {
+                val k = i / 6.0
+                boom(sx + (t.x - sx) * k + (rnd() - 0.5) * 6, sy + (t.y - sy) * k + (rnd() - 0.5) * 6, 0.35 + k * 0.25, 7 + k * 12)
+            }
+            for (i in 0 until 6) {
+                val e = Fx(FX_EMBER, t.x + (rnd() - 0.5) * 20, t.y + (rnd() - 0.5) * 14, 0.8 + rnd() * 0.5)
+                e.vx = (rnd() - 0.5) * 20; e.vy = -16 - rnd() * 14; fx.add(e)
+            }
+            smoke(t.x, t.y, (rnd() - 0.5) * 8, -12.0, 1.6, 7.0, true)
+            u.hitT = 0.35
+            host.sfx(S_IMPACT, t.x, t.y)
+            damage(t, d.atk * m, u)
+            for (v in ArrayList(units)) {
+                if (v === t || v.dead || v.team == u.team || UNIT[v.type].fly) continue
+                val dd = hyp(v.x - t.x, v.y - t.y)
+                if (dd < d.splash) damage(v, d.atk * 0.45 * (1 - dd / d.splash * 0.5), u)
+            }
+            if (t.kind != K_B) for (b in ArrayList(blds)) if (b.team != u.team && !b.dead && distRectPt(t.x, t.y, entRect(b)) < d.splash * 0.5) damage(b, d.atk * d.vsBld * 0.5, u)
+        } else if (u.type == U_GREN) {
+            // граната: летит дугой и рвётся, задевая всех рядом
+            val tx = t.x + (rnd() - 0.5) * 14
+            val ty = t.y + (rnd() - 0.5) * 14
+            proj.add(Proj(u.x + u.face * 6, u.y - 14, tx, ty, max(0.45, dist / 200), u.team, d.atk * atkBonus(u), d.splash, u, d.vsBld))
+            u.hitT = 0.25
+            host.sfx(S_MELEE, u.x, u.y)
+        } else if (u.type == U_MORTAR) {
+            // мортира: высокий навес, долгий полёт, большой разброс
+            val tx = t.x + (rnd() - 0.5) * 36
+            val ty = t.y + (rnd() - 0.5) * 36
+            proj.add(Proj(u.x + u.face * 6, u.y - 14, tx, ty, max(1.0, dist / 260), u.team, d.atk * atkBonus(u), d.splash, u, d.vsBld))
+            for (i in 0 until 6) smoke(u.x + u.face * 6, u.y - 16, (rnd() - 0.5) * 14, -16 - rnd() * 14, 2.0 + rnd(), 6 + rnd() * 5)
+            flash(u.x + u.face * 6, u.y - 16, 0.15, true)
+            host.sfx(S_CANNON, u.x, u.y)
         } else if (u.type == U_CANNON) {
             val tx = t.x + (rnd() - 0.5) * 22
             val ty = t.y + (rnd() - 0.5) * 22
             val sx = u.x + u.face * 14
             val sy = u.y - 9
-            proj.add(Proj(sx, sy, tx, ty, max(0.35, dist / 330), u.team, d.atk, d.splash, u, d.vsBld))
+            proj.add(Proj(sx, sy, tx, ty, max(0.35, dist / 330), u.team, d.atk * atkBonus(u), d.splash, u, d.vsBld))
             for (i in 0 until 5) smoke(sx, sy, u.face * (10 + rnd() * 25), -8 - rnd() * 10, 1.8 + rnd(), 6 + rnd() * 5)
             flash(sx, sy, 0.15, true)
             host.sfx(S_CANNON, u.x, u.y)
@@ -618,8 +810,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
 
     fun damage(t: Ent, amt: Double, src: Ent?) {
         if (t.dead) return
-        t.hp -= amt
-        if (t is Unt && src != null && !src.dead && src.kind == K_U && t.target == null && t.cmd != CMD_MOVE) {
+        t.hp -= if (t is Unt) amt * armorMul(t) else amt
+        if (t is Unt && src != null && !src.dead && src.kind == K_U && t.target == null && t.cmd != CMD_MOVE && (!flies(src) || canHitAir(t))) {
             if (t.type != U_PEASANT || t.task == null) t.target = src
         }
         if (t.team == 0 && time - lastAlert > 15) {
@@ -633,12 +825,20 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (src != null && src.team != t.team && src.team >= 0) stats[src.team].killed++
         if (t.team >= 0) stats[t.team].lost++
         if (t is Unt) {
+            if (t.type == U_HERO) host.toast(if (t.team == 0) "⚑ Наш генерал пал!" else "⚑ Вражеский генерал повержен!")
             val d = Decal(D_CORPSE, t.x, t.y, 40.0)
             d.type = t.type; d.team = t.team; d.face = t.face; d.dir = t.dir
             decals.add(d)
         } else if (t is Bld) {
-            for (j in t.ty until t.ty + t.h) for (i in t.tx until t.tx + t.w) occ[idx(i, j)] = 0
+            for (j in t.ty until t.ty + t.h) for (i in t.tx until t.tx + t.w) { occ[idx(i, j)] = 0; barrier[idx(i, j)] = 0 }
             fieldVer++; miniDirty = true
+            if (isWall(t.type)) {
+                // обломки стены: без большого пожара и без сообщения на каждый кусок
+                for (i in 0 until 5) smoke(t.x + (rnd() - 0.5) * TILE, t.y + (rnd() - 0.5) * TILE, (rnd() - 0.5) * 10, -10 - rnd() * 10, 1.5 + rnd(), 6 + rnd() * 5, true)
+                decals.add(Decal(D_CRATER, t.x, t.y + 4, 40.0))
+                host.sfx(S_IMPACT, t.x, t.y)
+                return
+            }
             val d = Decal(D_RUIN, t.tx * TILE.toDouble(), t.ty * TILE.toDouble(), 90.0)
             d.w = t.w * TILE.toDouble(); d.h = t.h * TILE.toDouble()
             decals.add(d)
@@ -669,7 +869,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                     while (q >= 0) {
                         val v = units.getOrNull(q)
                         q = uNext[q]
-                        if (v != null && v.team != p.team && !v.dead) hit.add(v)
+                        if (v != null && v.team != p.team && !v.dead && !UNIT[v.type].fly) hit.add(v)
                     }
                 }
                 for (v in hit) { val d = hyp(v.x - p.tx, v.y - p.ty); if (d < p.splash) damage(v, p.dmg * (1 - d / p.splash * 0.6), p.src) }
@@ -693,7 +893,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                     q = uNext[q]
                     if (qq <= k) continue
                     val v = units[qq]
-                    if (v.dead) continue
+                    if (v.dead || UNIT[v.type].fly != UNIT[u.type].fly) continue
                     var dx = v.x - u.x
                     var dy = v.y - u.y
                     val rr = u.r + v.r
@@ -706,7 +906,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                     val ny = dy / d * push
                     val wu = if (u.working) 0.2 else if (u.moving) 0.6 else 1.0
                     val wv = if (v.working) 0.2 else if (v.moving) 0.6 else 1.0
-                    moveBy(u, -nx * wu, -ny * wu); moveBy(v, nx * wv, ny * wv)
+                    if (UNIT[u.type].fly) { u.x -= nx; u.y -= ny; v.x += nx; v.y += ny }
+                    else { walkTeam = u.team; moveBy(u, -nx * wu, -ny * wu); walkTeam = v.team; moveBy(v, nx * wv, ny * wv) }
                 }
             }
         }
@@ -817,8 +1018,32 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         u.carry = 0
     }
 
+    private var repairWarn = -99.0
+
     private fun peasantTask(u: Unt, dt: Double) {
         val t = u.task!!
+        if (t.type == TASK_REPAIR) {
+            val b = t.b!!
+            if (b.dead || b.hp >= b.maxhp) { u.task = null; u.goal = null; return }
+            if (distTo(u, b) <= u.r + 8) {
+                u.goal = null; u.working = true; u.anim += dt
+                if (abs(b.x - u.x) > 1) u.face = if (b.x > u.x) 1 else -1
+                u.dir = dirOf(b.x - u.x, b.y - u.y)
+                val bd = BLD[b.type]
+                val gain = min(b.maxhp - b.hp, b.maxhp * 0.6 * dt / bd.time)
+                // ремонт стоит дерева: полный ремонт — около половины деревянной цены (не меньше 40)
+                val cost = gain / b.maxhp * max(40, bd.cost[WOOD] + bd.cost[STONE] / 2) * 0.5
+                if (res[u.team][WOOD] < cost) {
+                    if (u.team == 0 && time - repairWarn > 8) { repairWarn = time; host.toast("Для ремонта нужно дерево") }
+                    u.task = null; return
+                }
+                res[u.team][WOOD] -= cost; b.hp += gain
+            } else {
+                if (u.goal == null) goalEnt(u, b, 6.0)
+                if (steer(u, dt) && distTo(u, b) > u.r + 8) { t.fail++; if (t.fail > 6) u.task = null }
+            }
+            return
+        }
         if (t.type == TASK_BUILD) {
             val b = t.b!!
             if (b.dead || b.built) { u.task = null; u.goal = null; afterBuild(u, b); return }
@@ -903,7 +1128,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     private fun afterBuild(u: Unt, b: Bld) {
         if (b.dead) return
         if (b.type == B_FARM && farmWorkers(b, u) < 6) { orderGather(u, FOOD, farm = b); return }
-        for (o in blds) if (!o.dead && !o.built && o.team == u.team && hyp(o.x - u.x, o.y - u.y) < 10 * TILE) { orderBuild(u, o); return }
+        val next = blds.filter { !it.dead && !it.built && it.team == u.team && hyp(it.x - u.x, it.y - u.y) < 10 * TILE }.minByOrNull { hyp(it.x - u.x, it.y - u.y) }
+        if (next != null) { orderBuild(u, next); return }
         if (b.type == B_STORE || b.type == B_HALL) {
             val i = nearestTree(b.x, b.y, 10)
             if (i >= 0) { orderGather(u, WOOD, tile = i); return }
@@ -916,6 +1142,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     fun enqueue(b: Bld, type: Int): Boolean {
         val d = UNIT[type]
         if (b.queue.size >= 6) return false
+        if (type == U_HERO && hasHero(b.team)) return false
         if (!canAfford(b.team, d.cost)) return false
         pay(b.team, d.cost); b.queue.add(type)
         return true
@@ -941,7 +1168,16 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                 }
             }
         }
-        if (b.queue.isNotEmpty()) {
+        if (b.queue.isNotEmpty() && b.queue[0] >= Q_TECH) {
+            val t = b.queue[0] - Q_TECH
+            b.popBlocked = false
+            b.qt += dt
+            if (b.qt >= qTime(b, b.queue[0])) {
+                b.qt = 0.0; b.queue.removeAt(0)
+                finishTech(b.team, t)
+                if (b.team == 0 && sel.contains(b)) uiDirty = true
+            }
+        } else if (b.queue.isNotEmpty()) {
             val type = b.queue[0]
             val d = UNIT[type]
             if (pop[b.team] + d.pop <= cap[b.team]) {
@@ -975,7 +1211,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                 smoke(mx, my, (rnd() - 0.5) * 10, -8.0, 1.2, 4.0)
                 tracer(mx, my, tg.x, tg.y - 8)
                 host.sfx(S_SHOT, b.x, b.y)
-                if (rnd() < 0.8) damage(tg, bd.atk, b)
+                if (rnd() < 0.8) damage(tg, bd.atk * (1 + 0.15 * lvl(b.team, T_POWDER)), b)
             }
         }
     }
@@ -1034,9 +1270,9 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     }
 
     // ============================================================ ИИ
-    private val ORDER_T = intArrayOf(B_FARM, B_BARRACKS, B_FARM, B_STORE, B_FARM, B_TOWER, B_STABLE, B_BARRACKS, B_FARM, B_FOUNDRY, B_TOWER, B_FARM, B_STABLE)
-    private val ORDER_AT = intArrayOf(0, 45, 90, 110, 170, 220, 240, 340, 360, 420, 480, 520, 600)
-    private val ORDER_N = intArrayOf(1, 1, 2, 1, 3, 1, 1, 2, 4, 1, 2, 5, 2)
+    private val ORDER_T = intArrayOf(B_FARM, B_BARRACKS, B_FARM, B_STORE, B_FARM, B_TOWER, B_STABLE, B_BARRACKS, B_FARM, B_FOUNDRY, B_TOWER, B_FARM, B_ARSENAL, B_STABLE, B_LAIR, B_ACADEMY)
+    private val ORDER_AT = intArrayOf(0, 45, 90, 110, 170, 220, 240, 340, 360, 420, 480, 500, 520, 600, 680, 720)
+    private val ORDER_N = intArrayOf(1, 1, 2, 1, 3, 1, 1, 2, 4, 1, 2, 5, 1, 2, 1, 1)
 
     private fun aiTick(team: Int) {
         val A = ai[team]!!
@@ -1050,13 +1286,24 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (halls.isNotEmpty()) { A.hx = halls[0].x; A.hy = halls[0].y; A.hasHome = true }
         if (!A.hasHome) { if (myUnits.isNotEmpty()) { A.hx = myUnits[0].x; A.hy = myUnits[0].y; A.hasHome = true } else return }
         fun count(t: Int) = myB.count { it.type == t }
-        val pend = myB.filter { !it.built }
+        val pendAll = myB.filter { !it.built }
+        val pend = pendAll.filter { !isWall(it.type) }
         val T = time / P.pace
 
         for (b in pend) {
             if (b.lastProg != b.progress) { b.lastProg = b.progress; b.stallT = 0 } else b.stallT++
             if (b.stallT > 45) { pay(team, BLD[b.type].cost, -0.5); kill(b, null) }
         }
+        // стены строят двое крестьян, переходя от куска к куску
+        val pendWalls = pendAll.filter { isWall(it.type) }
+        if (pendWalls.isNotEmpty()) {
+            val n = peas.count { val t = it.task; t != null && t.type == TASK_BUILD && t.b?.let { b -> isWall(b.type) } == true }
+            if (n < 2) {
+                val w0 = pendWalls[0]
+                val cand = peas.filter { it.task?.type != TASK_BUILD }.sortedBy { hyp(it.x - w0.x, it.y - w0.y) }
+                for (i in 0 until min(2 - n, cand.size)) orderBuild(cand[i], pendWalls.minByOrNull { hyp(it.x - cand[i].x, it.y - cand[i].y) }!!)
+            }
+        } else if (A.walls < P.walls && T >= 560 + A.walls * 260 && count(B_BARRACKS) > 0 && (P.dragons == 0 || count(B_LAIR) > 0 || T >= 700) && R[STONE] >= 220 && R[WOOD] >= 60) aiWall(team, A)
         for (b in pend) {
             if (b.dead) continue
             val n = peas.count { it.task?.type == TASK_BUILD && it.task?.b === b }
@@ -1070,11 +1317,16 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (pend.size < 2) {
             for (k in ORDER_T.indices) {
                 val type = ORDER_T[k]
+                if (type == B_LAIR && P.dragons == 0) continue
                 if (T >= ORDER_AT[k] && count(type) < ORDER_N[k]) { if (canAfford(team, BLD[type].cost)) aiBuild(team, type, A); break }
             }
         }
+        if (P.dragons > 0 && T >= 480 && count(B_LAIR) == 0 && count(B_BARRACKS) > 0 && pend.none { it.type == B_LAIR } && canAfford(team, BLD[B_LAIR].cost)) aiBuild(team, B_LAIR, A)
         val queued = halls.sumOf { h -> h.queue.count { it == U_PEASANT } }
         for (h in halls) if (h.built && peas.size + queued < P.peas && h.queue.size < 2) enqueue(h, U_PEASANT)
+        // герой, когда войско уже есть: копим на него золото
+        val wantHero = time > 480 && army.size >= 4 && !hasHero(team)
+        if (wantHero) halls.firstOrNull { it.built && it.queue.size < 2 }?.let { enqueue(it, U_HERO) }
         val have = IntArray(4)
         for (u in peas) { val t = u.task; if (t != null && t.type == TASK_GATHER) have[t.res]++ }
         val late = count(B_BARRACKS) > 0
@@ -1094,16 +1346,36 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         val cannons = army.count { it.type == U_CANNON }
         val reserve = pend.isEmpty()
         val needHouse = cap[team] < POP_MAX && cap[team] - pop[team] < 6
-        for (b in myB) {
+        // копим золото на дракона, если логово готово
+        val saveGold = (myB.any { it.type == B_LAIR && it.built } && army.count { it.type == U_DRAGON } < P.dragons && R[GOLD] < UNIT[U_DRAGON].cost[GOLD]) ||
+            (wantHero && R[GOLD] < UNIT[U_HERO].cost[GOLD])
+        for (b in myB.sortedByDescending { it.type == B_LAIR }) {
             if (!b.built || b.queue.size >= 2) continue
             if (needHouse && R[WOOD] < 120 && b.type != B_HALL) continue
             if (b.type == B_BARRACKS) {
                 val mus = army.count { it.type == U_MUSKET }
                 val pk = army.count { it.type == U_PIKE }
-                val want = if (mus < pk) U_MUSKET else U_PIKE
-                if (!enqueue(b, want)) enqueue(b, if (want == U_MUSKET) U_PIKE else U_MUSKET)
-            } else if (b.type == B_STABLE && reserve) enqueue(b, U_CAV)
-            else if (b.type == B_FOUNDRY && cannons < P.cannons) enqueue(b, U_CANNON)
+                val gr = army.count { it.type == U_GREN }
+                val want = if (mus < pk && !saveGold) U_MUSKET else U_PIKE
+                if (time > 480 && !saveGold && gr * 3 < mus + pk && enqueue(b, U_GREN)) { }
+                else if (!enqueue(b, want) && !saveGold) enqueue(b, if (want == U_MUSKET) U_PIKE else U_MUSKET)
+            } else if (b.type == B_STABLE && reserve && !saveGold) {
+                val dr = army.count { it.type == U_DRAGOON }
+                if (!(dr < army.count { it.type == U_CAV } && enqueue(b, U_DRAGOON))) enqueue(b, U_CAV)
+            }
+            else if (b.type == B_FOUNDRY && cannons < P.cannons && !saveGold) enqueue(b, U_CANNON)
+            else if (b.type == B_FOUNDRY && time > 650 && army.count { it.type == U_SIEGE } + b.queue.count { it == U_SIEGE } < 1 &&
+                blds.count { it.team != team && it.team >= 0 && isWall(it.type) } >= 4 && enqueue(b, U_SIEGE)) { }
+            else if (b.type == B_FOUNDRY && time > 700 && !saveGold && army.count { it.type == U_MORTAR } + b.queue.size < (P.cannons + 1) / 2) enqueue(b, U_MORTAR)
+            else if (b.type == B_LAIR && army.count { it.type == U_DRAGON } + b.queue.size < P.dragons) enqueue(b, U_DRAGON)
+            else if (BLD[b.type].research.isNotEmpty() && b.queue.isEmpty() && !saveGold) {
+                // улучшения, только когда есть запас сверх цены
+                for (t in BLD[b.type].research) {
+                    if (techNext(team, t) >= TECH[t].levels) continue
+                    val c = techCost(team, t)
+                    if ((0..3).all { R[it] >= c[it] + (if (c[it] > 0) 40 else 0) }) { enqueueTech(b, t); break }
+                }
+            }
         }
         val threat = findEnemyAt(A.hx, A.hy, team, 15.0 * TILE, true)
         if (threat != null) {
@@ -1122,6 +1394,29 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                 A.wave++; A.nextAttack = time + P.interval
                 if (team == 1 && !auto) host.toast("Разведка: враг выступил в поход!")
             }
+        }
+    }
+
+    /** стена с воротами посередине поперёк дороги к врагу, в 8 клетках от ратуши */
+    private fun aiWall(team: Int, A: AI) {
+        A.walls++
+        val eh = blds.firstOrNull { it.team != team && !it.dead && it.type == B_HALL } ?: return
+        var dx = eh.x - A.hx
+        var dy = eh.y - A.hy
+        val L = hyp(dx, dy).let { if (it < 1) 1.0 else it }
+        dx /= L; dy /= L
+        val dist = 8.0 + (A.walls - 1) * 2
+        val cx = fl(A.hx / TILE + dx * dist)
+        val cy = fl(A.hy / TILE + dy * dist)
+        val horiz = abs(dy) > abs(dx) // идём к врагу по вертикали: стена горизонтальная
+        val len = 11
+        for (k in -len / 2..len / 2) {
+            val tx = if (horiz) cx + k else cx
+            val ty = if (horiz) cy else cy + k
+            val type = if (k == 0) B_GATE else B_WALL
+            if (!inB(tx, ty) || !canPlace(type, tx, ty, team) || !canAfford(team, BLD[type].cost)) continue
+            pay(team, BLD[type].cost)
+            placeBuilding(type, team, tx, ty, false)
         }
     }
 
@@ -1170,6 +1465,44 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     }
 
     // ============================================================ приказы игрока
+    // ============================================================ рынок, ремонт, снос
+    fun buyPrice(r: Int) = ceil(price[r]).toInt()
+    fun sellPrice(r: Int) = (price[r] * 0.75).toInt()
+    fun hasMarket(team: Int) = blds.any { it.team == team && !it.dead && it.built && it.type == B_STORE }
+
+    /** купить или продать 100 единиц ресурса r за золото; false — не хватает */
+    fun trade(team: Int, r: Int, buy: Boolean): Boolean {
+        val R = res[team]
+        if (buy) {
+            val c = buyPrice(r)
+            if (R[GOLD] < c) return false
+            R[GOLD] -= c.toDouble(); R[r] += 100.0
+            price[r] = min(PRICE_MAX, price[r] * 1.07)
+        } else {
+            if (R[r] < 100) return false
+            R[r] -= 100.0; R[GOLD] += sellPrice(r).toDouble()
+            price[r] = max(PRICE_MIN, price[r] * 0.93)
+        }
+        uiDirty = true
+        return true
+    }
+
+    fun orderRepair(u: Unt, b: Bld) {
+        u.target = null; u.goal = null; u.cmd = CMD_NONE
+        u.task = Task(TASK_REPAIR, WOOD).also { it.b = b }
+    }
+
+    /** снести своё здание: возвращается треть стоимости */
+    fun demolish(b: Bld) {
+        if (b.dead) return
+        val d = BLD[b.type]
+        val k = if (b.built) 0.33 else 0.75
+        for (r in 0..3) res[b.team][r] += Math.round(d.cost[r] * k).toDouble()
+        stats[b.team].lost--
+        kill(b, null)
+        sel.remove(b); uiDirty = true
+    }
+
     fun groupMove(list: List<Unt>, x: Double, y: Double, cmd: Int) {
         if (list.isEmpty()) return
         var cx = 0.0
@@ -1209,15 +1542,17 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         var bd = 16.0
         for (u in units) {
             if (u.dead || !seen(u)) continue
-            val d = hyp(u.x - wx, u.y - 8 - wy)
+            val d = hyp(u.x - wx, u.y - (if (UNIT[u.type].fly) 56 else 8) - wy)
             if (d < bd + u.r * 0.5) { bd = d; best = u }
         }
-        if (best != null) return best
+        // здание под пальцем важнее отряда рядом с ним: отряд берётся, только если палец прямо на нём
+        if (best != null && bd < 7) return best
         for (b in blds) {
             if (b.dead || !seen(b)) continue
             val r = entRect(b)
             if (wx >= r[0] && wx <= r[2] && wy >= r[1] - 14 && wy <= r[3]) return b
         }
+        if (best != null) return best
         for (m in mines) {
             if (m.dead) continue
             val r = entRect(m)
@@ -1236,9 +1571,11 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     private var lastTapT = 0L
     private var lastTapId = 0
 
-    fun tapWorld(wx: Double, wy: Double) {
+    fun tapWorld(wx: Double, wy: Double) = tapAt(wx, wy, if (placing != null) null else pickAt(wx, wy))
+
+    /** тап по точке мира; hit — что под пальцем (в 3D его ищут по экрану) */
+    fun tapAt(wx: Double, wy: Double, hit: Ent?) {
         if (placing != null) { setGhost(wx, wy); return }
-        val hit = pickAt(wx, wy)
         val sel0 = ownSelUnits()
         val now = System.nanoTime() / 1_000_000
         if (hit is Unt && hit.team == 0 && !amove) {
@@ -1251,22 +1588,19 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (hit is Bld && hit.team == 0) {
             val peas = sel0.filter { it.type == U_PEASANT }
             if (peas.isNotEmpty() && peas.size == sel0.size) {
+                // крестьяне: недострой — достроить, ферма — работать; готовое здание просто выбирается
+                // (чинить — кнопкой «Чинить» в панели здания)
                 if (!hit.built) { for (u in peas) orderBuild(u, hit); marker(hit.x, hit.y, 0xffe8b84a.toInt()); return }
-                if (hit.type == B_FARM) { for (u in peas) orderGather(u, FOOD, farm = hit); marker(hit.x, hit.y, 0xffe8b84a.toInt()); return }
-                if (BLD[hit.type].drop && peas.any { it.carry > 0 }) {
-                    for (u in peas) if (u.carry > 0) {
-                        if (u.task == null) u.task = Task(TASK_GATHER, u.carryType)
-                        u.ret = true; u.goal = null
-                    }
-                    return
-                }
+                if (hit.type == B_FARM && farmWorkers(hit, null) < 6) { for (u in peas) orderGather(u, FOOD, farm = hit); marker(hit.x, hit.y, 0xffe8b84a.toInt()); return }
             }
             if (sel.size == 1 && sel[0] === hit) return
             sel = arrayListOf(hit); uiDirty = true; host.sfx(S_CLICK, Double.NaN, Double.NaN); return
         }
         if (sel0.isNotEmpty()) {
-            if (hit != null && (hit.kind == K_U || hit.kind == K_B) && hit.team == 1) {
-                for (u in sel0) { u.task = null; u.goal = null; u.target = hit; u.cmd = CMD_ATTACK }
+            val shooters = if (flies(hit)) sel0.filter { canHitAir(it) } else sel0
+            if (hit != null && (hit.kind == K_U || hit.kind == K_B) && hit.team == 1 && shooters.isNotEmpty()) {
+                if (shooters.size < sel0.size) groupMove(sel0.filter { !canHitAir(it) }, hit.x, hit.y, CMD_MOVE)
+                for (u in shooters) { u.task = null; u.goal = null; u.target = hit; u.cmd = CMD_ATTACK }
                 marker(hit.x, hit.y - 6, 0xffff4a3a.toInt()); host.sfx(S_ORDER, Double.NaN, Double.NaN); amove = false; uiDirty = true; return
             }
             val peas = sel0.filter { it.type == U_PEASANT }
@@ -1312,7 +1646,11 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         val b = min(y0, y1)
         val c = max(x0, x1)
         val d = max(y0, y1)
-        val list = units.filter { it.team == 0 && !it.dead && it.x >= a && it.x <= c && it.y - 6 >= b - 6 && it.y - 6 <= d + 6 }
+        selectUnits(units.filter { it.team == 0 && !it.dead && it.x >= a && it.x <= c && it.y - 6 >= b - 6 && it.y - 6 <= d + 6 })
+    }
+
+    /** выделить свои отряды рамкой: если среди крестьян есть заметная армия, берётся только армия */
+    fun selectUnits(list: List<Unt>) {
         val mil = list.filter { it.type != U_PEASANT }
         sel = ArrayList(if (mil.isNotEmpty() && mil.size < list.size && mil.size >= 3) mil else list)
         uiDirty = true
@@ -1321,9 +1659,27 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
 
     fun setGhost(wx: Double, wy: Double) {
         val p = placing ?: return
+        if (p.type == B_WALL) { setWallLine(wx, wy, wx, wy); return }
         val d = BLD[p.type]
         p.tx = fl(wx / TILE - d.w / 2.0 + 0.5); p.ty = fl(wy / TILE - d.h / 2.0 + 0.5)
         p.ok = canPlace(p.type, p.tx, p.ty, 0)
+    }
+
+    /** стена от точки до точки: прямая по горизонтали или вертикали, не длиннее 40 клеток */
+    fun setWallLine(sx: Double, sy: Double, ex: Double, ey: Double) {
+        val p = placing ?: return
+        val ax = clampI(fl(sx / TILE), 0, W - 1)
+        val ay = clampI(fl(sy / TILE), 0, H - 1)
+        var bx = clampI(fl(ex / TILE), 0, W - 1)
+        var by = clampI(fl(ey / TILE), 0, H - 1)
+        if (abs(bx - ax) >= abs(by - ay)) by = ay else bx = ax
+        val n = min(40, max(abs(bx - ax), abs(by - ay)) + 1)
+        val stx = sign((bx - ax).toDouble()).toInt()
+        val sty = sign((by - ay).toDouble()).toInt()
+        p.tx = ax; p.ty = ay
+        p.line = IntArray(n) { idx(ax + stx * it, ay + sty * it) }
+        p.oks = BooleanArray(n) { canPlace(B_WALL, p.line[it] % W, p.line[it] / W, 0) }
+        p.ok = p.oks.any { it }
     }
 
     fun startPlacing(type: Int) {
@@ -1331,15 +1687,47 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         placing = Placing(type)
         val v = viewRect()
         setGhost((v[0] + v[2]) / 2, (v[1] + v[3]) / 2)
+        if (type == B_WALL) host.toast("Проведите пальцем по земле, чтобы протянуть стену")
         uiDirty = true
+    }
+
+    private fun confirmWall(p: Placing) {
+        val d = BLD[B_WALL]
+        val want = p.oks.count { it }
+        val built = ArrayList<Bld>()
+        for (k in p.line.indices) {
+            if (!p.oks[k] || !canAfford(0, d.cost)) continue
+            val i = p.line[k]
+            if (!canPlace(B_WALL, i % W, i / W, 0)) continue
+            pay(0, d.cost)
+            built.add(placeBuilding(B_WALL, 0, i % W, i / W, false))
+        }
+        if (built.isEmpty()) { host.toast("Не хватает: " + missing(d.cost)); return }
+        if (built.size < want) host.toast("Камня хватило на ${built.size} из $want")
+        val peas = ownSelUnits().filter { it.type == U_PEASANT }
+        // крестьяне берутся за ближайшие куски, дальше достраивают соседние сами
+        for ((k, u) in peas.withIndex()) orderBuild(u, built[k * built.size / peas.size])
+        placing = null; uiDirty = true; host.sfx(S_ORDER, Double.NaN, Double.NaN)
+    }
+
+    /** убрать здание без обломков (стену под новые ворота) */
+    private fun removeQuiet(b: Bld) {
+        b.dead = true
+        for (j in b.ty until b.ty + b.h) for (i in b.tx until b.tx + b.w) { occ[idx(i, j)] = 0; barrier[idx(i, j)] = 0 }
+        fieldVer++; miniDirty = true; sel.remove(b)
     }
 
     fun confirmPlace() {
         val p = placing ?: return
         if (!p.ok) { host.toast("Сюда нельзя: нужно свободное открытое место"); return }
+        if (p.type == B_WALL) { confirmWall(p); return }
         val d = BLD[p.type]
         if (!canAfford(0, d.cost)) { host.toast("Не хватает: " + missing(d.cost)); return }
         pay(0, d.cost)
+        if (p.type == B_GATE) {
+            val old = byId[occ[idx(p.tx, p.ty)]]
+            if (old is Bld && old.type == B_WALL && old.team == 0) { if (old.built) pay(0, BLD[B_WALL].cost, -1.0); removeQuiet(old) }
+        }
         val b = placeBuilding(p.type, 0, p.tx, p.ty, false)
         for (u in ownSelUnits()) if (u.type == U_PEASANT) orderBuild(u, b)
         placing = null; uiDirty = true; host.sfx(S_ORDER, Double.NaN, Double.NaN)
@@ -1350,11 +1738,12 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     // ============================================================ конец игры
     private fun checkEnd() {
         if (over) return
+        if (mission >= 0) { val r = Campaign.check(this); if (r != 0) { endGame(r > 0); return } }
         val alive = BooleanArray(2) { t ->
-            blds.any { it.team == t && !it.dead } || units.any { it.team == t && !it.dead && it.type != U_PEASANT } ||
+            blds.any { it.team == t && !it.dead && !isWall(it.type) } || units.any { it.team == t && !it.dead && it.type != U_PEASANT } ||
                 units.any { it.team == t && !it.dead && it.type == U_PEASANT && blds.any { b -> b.team == t } }
         }
-        val aliveU = BooleanArray(2) { t -> blds.any { it.team == t } || units.any { it.team == t } }
+        val aliveU = BooleanArray(2) { t -> blds.any { it.team == t && !isWall(it.type) } || units.any { it.team == t } }
         if (!aliveU[1] || !alive[1]) endGame(true)
         else if (!aliveU[0] || !alive[0]) endGame(false)
     }

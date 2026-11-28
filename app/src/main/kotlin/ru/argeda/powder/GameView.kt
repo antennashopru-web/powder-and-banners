@@ -25,6 +25,39 @@ import kotlin.math.sin
 
 fun rgba(r: Int, g: Int, b: Int, a: Double): Int = Color.argb((clamp(a, 0.0, 1.0) * 255).toInt(), r, g, b)
 
+
+/** мелкий декор на траве (камешки, кусты, цветы) для куска местности с левым верхним углом (x0, y0) в клетках */
+fun paintGrassDecor(G: Game, g: Canvas, x0: Int, y0: Int, p: Paint) {
+    val T = TILE.toFloat()
+    val rf = RectF()
+    fun oval(g: Canvas, x: Float, y: Float, rx: Float, ry: Float, p: Paint) { rf.set(x - rx, y - ry, x + rx, y + ry); g.drawOval(rf, p) }
+    for (ty in y0 until min(G.H, y0 + CH + 1)) for (tx in x0 until min(G.W, x0 + CH + 1)) {
+        val t = G.terrain[G.idx(tx, ty)].toInt()
+        if (t != T_GRASS) continue
+        val px0 = (tx - x0) * T
+        val py0 = (ty - y0) * T
+        fun hh(s: Int) = hash2(tx, ty, s).toFloat()
+        if (hh(71) < 0.05) { p.color = rgba(110, 88, 56, .22); oval(g, px0 + 8 + hh(72) * 16, py0 + 8 + hh(73) * 16, 7 + hh(74) * 6, 4 + hh(75) * 3, p) }
+        if (hh(81) < 0.05) {
+            val ax = px0 + 6 + hh(82) * 20
+            val ay = py0 + 10 + hh(83) * 16
+            p.color = rgba(0, 0, 0, .18); oval(g, ax + 0.8f, ay + 1f, 2.6f, 1.4f, p)
+            p.color = 0xff8d8f88.toInt(); oval(g, ax, ay, 2.4f, 1.6f, p)
+            p.color = 0xffc4c6be.toInt(); oval(g, ax - 0.6f, ay - 0.6f, 1.1f, 0.7f, p)
+        }
+        if (hh(91) < 0.035) {
+            p.color = rgba(0, 0, 0, .2); oval(g, px0 + 19, py0 + 22, 7f, 3f, p)
+            p.color = 0xff3a6826.toInt(); g.drawCircle(px0 + 16, py0 + 18, 5f, p); g.drawCircle(px0 + 21, py0 + 20, 4f, p)
+            p.color = 0xff5c9440.toInt(); g.drawCircle(px0 + 15, py0 + 16, 2.5f, p); g.drawCircle(px0 + 20.5f, py0 + 18.5f, 1.8f, p)
+        }
+        if (hh(99) < 0.05) {
+            val col = intArrayOf(0xfff0e070.toInt(), 0xfff4f4f4.toInt(), 0xffd070c0.toInt(), 0xffe86a5a.toInt())[(hh(98) * 4).toInt()]
+            p.color = col
+            for (q in 0 until 4) g.drawCircle(px0 + 6 + hash2(tx, ty, 200 + q).toFloat() * 20, py0 + 8 + hash2(tx, ty, 210 + q).toFloat() * 18, 1.3f, p)
+        }
+    }
+}
+
 /** Поле боя: шаг логики, отрисовка мира на Canvas и жесты пальцами. */
 @SuppressLint("ViewConstructor")
 class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
@@ -79,7 +112,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     }
 
     override fun onDraw(c: Canvas) {
-        c.drawColor(0xff0b0805.toInt())
+        c.drawColor(0xff1e1810.toInt())
         game?.let { render(c, it) }
     }
 
@@ -147,32 +180,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         g.translate(0f, CPAD.toFloat())
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         val T = TILE.toFloat()
-        // мелкий декор на траве
-        for (ty in y0 until min(G.H, y0 + CH + 1)) for (tx in x0 until min(G.W, x0 + CH + 1)) {
-            val t = G.terrain[G.idx(tx, ty)].toInt()
-            if (t != T_GRASS) continue
-            val px0 = (tx - x0) * T
-            val py0 = (ty - y0) * T
-            fun hh(s: Int) = hash2(tx, ty, s).toFloat()
-            if (hh(71) < 0.05) { p.color = rgba(110, 88, 56, .22); oval(g, px0 + 8 + hh(72) * 16, py0 + 8 + hh(73) * 16, 7 + hh(74) * 6, 4 + hh(75) * 3, p) }
-            if (hh(81) < 0.05) {
-                val ax = px0 + 6 + hh(82) * 20
-                val ay = py0 + 10 + hh(83) * 16
-                p.color = rgba(0, 0, 0, .18); oval(g, ax + 0.8f, ay + 1f, 2.6f, 1.4f, p)
-                p.color = 0xff8d8f88.toInt(); oval(g, ax, ay, 2.4f, 1.6f, p)
-                p.color = 0xffc4c6be.toInt(); oval(g, ax - 0.6f, ay - 0.6f, 1.1f, 0.7f, p)
-            }
-            if (hh(91) < 0.035) {
-                p.color = rgba(0, 0, 0, .2); oval(g, px0 + 19, py0 + 22, 7f, 3f, p)
-                p.color = 0xff3a6826.toInt(); g.drawCircle(px0 + 16, py0 + 18, 5f, p); g.drawCircle(px0 + 21, py0 + 20, 4f, p)
-                p.color = 0xff5c9440.toInt(); g.drawCircle(px0 + 15, py0 + 16, 2.5f, p); g.drawCircle(px0 + 20.5f, py0 + 18.5f, 1.8f, p)
-            }
-            if (hh(99) < 0.05) {
-                val col = intArrayOf(0xfff0e070.toInt(), 0xfff4f4f4.toInt(), 0xffd070c0.toInt(), 0xffe86a5a.toInt())[(hh(98) * 4).toInt()]
-                p.color = col
-                for (q in 0 until 4) g.drawCircle(px0 + 6 + hash2(tx, ty, 200 + q).toFloat() * 20, py0 + 8 + hash2(tx, ty, 210 + q).toFloat() * 18, 1.3f, p)
-            }
-        }
+        paintGrassDecor(G, g, x0, y0, p)
         // деревья, сверху вниз (с соседями по краям, чтобы кроны и тени не резались на стыках)
         val pt = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
         for (ty in max(0, y0 - 1) until min(G.H, y0 + CH)) for (tx in max(0, x0 - 2) until min(G.W, x0 + CH + 1)) {
@@ -203,15 +211,39 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         private set
     private var fogVer = -1
     private var fogPx = IntArray(0)
+    /** пиксели тумана после syncFog (ARGB, W×H) */
+    fun fogPixels(): IntArray = fogPx
 
+    private var fogLvl = ByteArray(0)
+
+    /** Туман войны: мягкие края (сглаживание 3×3), неразведанное — тёмная «старая карта», разведанное — сумрак. */
     fun syncFog(G: Game) {
         if (fogBmp == null || fogBmp!!.width != G.W) {
-            fogBmp = Bitmap.createBitmap(G.W, G.H, Bitmap.Config.ARGB_8888); fogPx = IntArray(G.W * G.H); fogVer = -1
+            fogBmp = Bitmap.createBitmap(G.W, G.H, Bitmap.Config.ARGB_8888); fogPx = IntArray(G.W * G.H); fogLvl = ByteArray(G.W * G.H); fogVer = -1
         }
         if (fogVer == G.fogVer) return
         fogVer = G.fogVer
-        for (i in fogPx.indices) fogPx[i] = (if (G.visible[i].toInt() != 0) 0 else if (G.explored[i].toInt() != 0) 110 else 255) shl 24
-        fogBmp!!.setPixels(fogPx, 0, G.W, 0, 0, G.W, G.H)
+        val W = G.W
+        val H = G.H
+        for (i in fogLvl.indices) fogLvl[i] = (if (G.visible[i].toInt() != 0) 0 else if (G.explored[i].toInt() != 0) 1 else 2).toByte()
+        for (y in 0 until H) for (x in 0 until W) {
+            var a = 0
+            var u = 0
+            for (dy in -1..1) for (dx in -1..1) {
+                val wgt = if (dx == 0 && dy == 0) 4 else if (dx == 0 || dy == 0) 2 else 1
+                val xx = x + dx
+                val yy = y + dy
+                val l = if (xx < 0 || yy < 0 || xx >= W || yy >= H) 2 else fogLvl[yy * W + xx].toInt()
+                if (l == 1) a += 112 * wgt else if (l == 2) { a += 255 * wgt; u += wgt }
+            }
+            a /= 16
+            val k = u / 16f
+            val r = (12 + (30 - 12) * k).toInt()
+            val g = (14 + (24 - 14) * k).toInt()
+            val b = (24 + (16 - 24) * k).toInt()
+            fogPx[y * W + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        fogBmp!!.setPixels(fogPx, 0, W, 0, 0, W, H)
     }
 
     // ------------------------------------------------------------ кадр
@@ -219,6 +251,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
     private fun depth(e: Ent): Double = when (e) {
         is Mine -> e.y + 32
         is Bld -> (e.ty + e.h) * TILE.toDouble()
+        is Unt -> if (UNIT[e.type].fly) e.y + 400 else e.y
         else -> e.y
     }
     private val depthCmp = Comparator<Ent> { a, b -> depth(a).compareTo(depth(b)) }
@@ -227,10 +260,10 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         if (e.working) { val k = floor(e.anim * 5).toInt() % 4; return 5 + (if (k == 3) 1 else k) }
         if (e.aimT > 0) {
             if (e.hitT > 0) return if (e.hitT > 0.17) 5 else if (e.hitT > 0.08) 6 else 7
-            if (e.type == U_MUSKET || e.type == U_CANNON) return if (UNIT[e.type].cd - e.cd < 0.25) 6 else 5
+            if (isGun(e.type)) return if (UNIT[e.type].cd - e.cd < 0.25) 6 else 5
             return 5
         }
-        if (e.moving) return 1 + (floor(e.anim * (if (e.type == U_CAV) 9 else 7)).toInt() and 3)
+        if (e.moving || UNIT[e.type].fly) return 1 + (floor(e.anim * (if (e.type == U_CAV || e.type == U_DRAGOON) 9 else if (e.type == U_DRAGON) 5 else 7)).toInt() and 3)
         return 0
     }
 
@@ -277,14 +310,32 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                     pb.alpha = 255
                 }
                 D_RUIN -> {
-                    pf.color = 0xff4a3a2a.toInt(); alpha(pf, a)
-                    c.drawRect(x + 4, (y + d.h * 0.3).toFloat(), (x + d.w - 4).toFloat(), (y + d.h * 0.96).toFloat(), pf)
-                    pf.color = 0xff2a2018.toInt(); alpha(pf, a)
-                    for (k in 0 until 8) {
-                        val rx = (x + 6 + hash2(k, d.x.toInt(), 1) * (d.w - 18)).toFloat()
-                        val ry = (y + d.h * 0.35 + hash2(k, d.y.toInt(), 2) * d.h * 0.5).toFloat()
-                        c.drawRect(rx, ry, rx + 10, ry + 6, pf)
+                    // руины: выжженная земля, груды камня и обгорелые балки
+                    val cx = (x + d.w / 2).toFloat()
+                    val cy = (y + d.h * 0.66).toFloat()
+                    pf.color = rgba(28, 22, 16, .55 * a); oval(c, cx, cy, (d.w * 0.55).toFloat(), (d.h * 0.36).toFloat(), pf)
+                    pf.color = rgba(60, 48, 36, .5 * a); oval(c, cx, cy, (d.w * 0.4).toFloat(), (d.h * 0.25).toFloat(), pf)
+                    for (k in 0 until 14) {
+                        val ang = hash2(k, d.x.toInt(), 1) * PI * 2
+                        val rr = Math.sqrt(hash2(k, d.y.toInt(), 2))
+                        val rx = (cx + Math.cos(ang) * rr * d.w * 0.38).toFloat()
+                        val ry = (cy + Math.sin(ang) * rr * d.h * 0.22).toFloat()
+                        val sz = (2.5 + hash2(k, 7, d.x.toInt()) * 4).toFloat()
+                        pf.color = rgba(0, 0, 0, .3 * a); oval(c, rx + 1, ry + 1.2f, sz, sz * 0.6f, pf)
+                        val gch = (95 + hash2(k, 3, d.y.toInt()) * 60).toInt()
+                        pf.color = rgba(gch, gch - 6, gch - 14, a); oval(c, rx, ry, sz, sz * 0.7f, pf)
+                        pf.color = rgba(gch + 40, gch + 36, gch + 28, .7 * a); oval(c, rx - sz * 0.3f, ry - sz * 0.25f, sz * 0.45f, sz * 0.3f, pf)
                     }
+                    ps.strokeWidth = 2.6f; ps.strokeCap = Paint.Cap.ROUND
+                    for (k in 0 until 4) {
+                        val bx = (cx + (hash2(k, d.x.toInt(), 9) - 0.5) * d.w * 0.5).toFloat()
+                        val by = (cy + (hash2(k, d.y.toInt(), 8) - 0.5) * d.h * 0.25).toFloat()
+                        val ang = hash2(k, 5, 5) * PI
+                        val L = (10 + hash2(k, 6, 6) * 12).toFloat()
+                        ps.color = rgba(40, 26, 16, a)
+                        c.drawLine(bx, by, bx + (Math.cos(ang) * L).toFloat(), by + (Math.sin(ang) * L * 0.5).toFloat(), ps)
+                    }
+                    ps.strokeCap = Paint.Cap.BUTT
                 }
                 D_CRATER -> { pf.color = rgba(40, 30, 20, .45 * a); oval(c, x, y, 9f, 5f, pf) }
                 D_STUMP -> {
@@ -298,7 +349,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         // площадки зданий
         pf.color = rgba(120, 92, 58, .38)
         for (b in G.blds) {
-            if (!G.seen(b) || b.x < v[0] - 160 || b.x > v[2] + 160 || b.y < v[1] - 160 || b.y > v[3] + 160) continue
+            if (!G.seen(b) || isWall(b.type) || b.x < v[0] - 160 || b.x > v[2] + 160 || b.y < v[1] - 160 || b.y > v[3] + 160) continue
             val x0 = b.tx * TILE.toFloat()
             val y0 = b.ty * TILE.toFloat()
             val w = b.w * TILE.toFloat()
@@ -325,6 +376,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                     ps.color = if (e.team == 0) 0xff7cff6a.toInt() else 0xffff6a5a.toInt(); ps.strokeWidth = 2f
                     oval(c, e.x.toFloat(), (e.y + e.h * TILE * 0.2).toFloat(), e.w * TILE * 0.62f, e.h * TILE * 0.42f, ps)
                 }
+                if (isWall(e.type) && e.built) { drawWall(c, G, e); continue }
                 spr.drawBuilding(c, e.type, e.team, e.tx * TILE.toFloat(), e.ty * TILE.toFloat(), if (e.built) 1f else (e.progress / BLD[e.type].time).toFloat(), pb, pf, ps)
                 if (e.built && e.hp < e.maxhp * 0.55) drawFire(c, e, t)
                 continue
@@ -336,6 +388,11 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                 val col = if (u.team == 0) intArrayOf(124, 255, 106) else intArrayOf(255, 106, 90)
                 pf.color = rgba(col[0], col[1], col[2], .18); oval(c, x, y, (u.r + 3).toFloat(), ((u.r + 3) * 0.45).toFloat(), pf)
                 ps.color = rgba(col[0], col[1], col[2], .95); ps.strokeWidth = 1.4f; oval(c, x, y, (u.r + 3).toFloat(), ((u.r + 3) * 0.45).toFloat(), ps)
+            }
+            if (u.type == U_HERO) {
+                // золотое кольцо воодушевления
+                ps.color = rgba(255, 210, 90, .45 + 0.2 * kotlin.math.sin(t * 3)); ps.strokeWidth = 1.6f
+                oval(c, x, y, HERO_AURA.toFloat(), (HERO_AURA * 0.5).toFloat(), ps)
             }
             spr.drawUnit(c, u.type, u.team, u.dir, unitFrame(u), x, y, pb)
             if (u.carry > 0 && !u.working && u.carryType >= 0) {
@@ -352,20 +409,23 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
             val x: Float
             val y: Float
             if (e is Bld) { w = e.w * TILE * 0.7f; x = e.x.toFloat() - w / 2; y = e.ty * TILE - 12f }
-            else { val u = e as Unt; w = 16f; x = u.x.toFloat() - 8; y = u.y.toFloat() - (if (u.type == U_CAV) 38 else if (u.type == U_CANNON) 24 else 30) }
-            pf.color = rgba(0, 0, 0, .6); c.drawRect(x - 1, y - 1, x + w + 1, y + 3, pf)
+            else { val u = e as Unt; w = if (u.type == U_DRAGON) 26f else 16f; x = u.x.toFloat() - w / 2; y = u.y.toFloat() - (if (u.type == U_CAV || u.type == U_DRAGOON) 38 else if (u.type == U_CANNON || u.type == U_MORTAR) 24 else if (u.type == U_DRAGON) 86 else if (u.type == U_SIEGE) 66 else 30) }
+            val bh = if (e is Bld) 3.5f else 2.5f
+            pf.color = rgba(20, 12, 6, .78); rf.set(x - 1.2f, y - 1.2f, x + w + 1.2f, y + bh + 1.2f); c.drawRoundRect(rf, 1.6f, 1.6f, pf)
             val f = clamp(e.hp / e.maxhp, 0.0, 1.0).toFloat()
-            pf.color = if (f > 0.5) 0xff55cc33.toInt() else if (f > 0.25) 0xffeecc33.toInt() else 0xffee4433.toInt()
-            c.drawRect(x, y, x + w * f, y + 2, pf)
-            if (e is Bld && !e.built) { pf.color = 0xffe8b84a.toInt(); c.drawRect(x, y + 4, x + w * (e.progress / BLD[e.type].time).toFloat(), y + 6, pf) }
+            pf.color = if (e.team != 0) 0xffe0503c.toInt() else if (f > 0.5) 0xff6ad23e.toInt() else if (f > 0.25) 0xffeec23a.toInt() else 0xffee4433.toInt()
+            c.drawRect(x, y, x + w * f, y + bh, pf)
+            pf.color = rgba(255, 255, 255, .28); c.drawRect(x, y, x + w * f, y + bh * 0.4f, pf)
+            if (e is Bld && !e.built) { pf.color = 0xffe8b84a.toInt(); c.drawRect(x, y + bh + 2, x + w * (e.progress / BLD[e.type].time).toFloat(), y + bh + 4, pf) }
         }
         // снаряды
         for (p in G.proj) {
             val k = min(1.0, p.t / p.dur)
             val L = hyp(p.tx - p.sx, p.ty - p.sy)
-            val hgt = (sin(k * PI) * L * 0.18).toFloat()
-            pf.color = rgba(0, 0, 0, .25); oval(c, p.x.toFloat(), p.y.toFloat(), 3f, 1.5f, pf)
-            pf.color = 0xff1a1a1a.toInt(); c.drawCircle(p.x.toFloat(), p.y.toFloat() - hgt, 3f, pf)
+            val hgt = (sin(k * PI) * L * projArc(p.src)).toFloat()
+            val sz = projSize(p.src)
+            pf.color = rgba(0, 0, 0, .25); oval(c, p.x.toFloat(), p.y.toFloat(), sz, sz / 2, pf)
+            pf.color = 0xff1a1a1a.toInt(); c.drawCircle(p.x.toFloat(), p.y.toFloat() - hgt, sz, pf)
         }
         // эффекты
         for (f in G.fx) {
@@ -402,6 +462,19 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         }
         // призрак здания
         G.placing?.let { p ->
+            if (p.type == B_WALL) {
+                pb.alpha = (0.6 * 255).toInt()
+                for (k in p.line.indices) {
+                    val i = p.line[k]
+                    val x0 = (i % G.W) * TILE.toFloat()
+                    val y0 = (i / G.W) * TILE.toFloat()
+                    pf.color = if (p.oks[k]) rgba(80, 255, 80, .22) else rgba(255, 60, 40, .3)
+                    c.drawRect(x0, y0, x0 + TILE, y0 + TILE, pf)
+                    if (p.oks[k]) spr.drawBuilding(c, B_WALL, 0, x0, y0, 1f, pb, pf, ps)
+                }
+                pb.alpha = 255
+                return@let
+            }
             val d = BLD[p.type]
             pb.alpha = (0.6 * 255).toInt()
             spr.drawBuilding(c, p.type, 0, p.tx * TILE.toFloat(), p.ty * TILE.toFloat(), 1f, pb, pf, ps)
@@ -495,6 +568,23 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         }
     }
 
+    /** стена: полупролёты к соседям (сначала дальние), столб, ближний пролёт; ворота вдоль или поперёк */
+    private fun drawWall(c: Canvas, G: Game, b: Bld) {
+        val cx = b.x.toFloat()
+        val cy = b.y.toFloat()
+        if (b.type == B_GATE) {
+            if (G.gateVertical(b)) spr.drawWallPart(c, 4, b.team, cx, cy, pb)
+            else spr.drawBuilding(c, b.type, b.team, b.tx * TILE.toFloat(), b.ty * TILE.toFloat(), 1f, pb, pf, ps)
+            return
+        }
+        val m = G.wallLinks(b)
+        if (m and 8 != 0) spr.drawWallPart(c, 3, b.team, cx, cy, pb)
+        if (m and 4 != 0) spr.drawWallPart(c, 2, b.team, cx, cy, pb)
+        if (m and 1 != 0) spr.drawWallPart(c, 0, b.team, cx, cy, pb)
+        spr.drawBuilding(c, b.type, b.team, b.tx * TILE.toFloat(), b.ty * TILE.toFloat(), 1f, pb, pf, ps)
+        if (m and 2 != 0) spr.drawWallPart(c, 1, b.team, cx, cy, pb)
+    }
+
     private fun drawFire(c: Canvas, b: Bld, t: Double) {
         val x0 = b.tx * TILE.toFloat()
         val y0 = b.ty * TILE.toFloat()
@@ -575,7 +665,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         }
         fogBmp?.let { mc.drawBitmap(it, null, RectF(0f, 0f, S, S), Paint(Paint.FILTER_BITMAP_FLAG)) }
         val v = G.viewRect()
-        val st = Paint().apply { style = Paint.Style.STROKE; color = Color.WHITE; strokeWidth = 1f }
+        val st = Paint().apply { style = Paint.Style.STROKE; color = 0xffffe39a.toInt(); strokeWidth = 1.2f }
         mc.drawRect((v[0] / TILE * s).toFloat(), (v[1] / TILE * s).toFloat(), (v[2] / TILE * s).toFloat(), (v[3] / TILE * s).toFloat(), st)
         G.ping?.let { pg ->
             st.color = 0xffff4030.toInt(); st.strokeWidth = 2f; st.isAntiAlias = true
@@ -592,6 +682,8 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         var z0 = 1.0
         var mx = 0f
         var my = 0f
+        var wx = 0.0
+        var wy = 0.0
     }
 
     private var gest: Gest? = null
@@ -618,6 +710,8 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                 val y = e.y / d
                 val g = Gest(if (G.boxMode && G.placing == null) M_BOX else M_PEND, x, y)
                 gest = g
+                // стена: палец тянет её от точки касания
+                if (G.placing?.type == B_WALL) { g.mode = M_WALL; g.wx = toWorldX(G, x); g.wy = toWorldY(G, y); G.setWallLine(g.wx, g.wy, g.wx, g.wy) }
                 if (g.mode == M_PEND && G.placing == null) postDelayed(longPress, 400)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -654,6 +748,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                 if (g.mode == M_DEAD) return true
                 val x = e.getX(0) / d
                 val y = e.getY(0) / d
+                if (g.mode == M_WALL) { G.setWallLine(g.wx, g.wy, toWorldX(G, x), toWorldY(G, y)); return true }
                 val dx = x - g.lx
                 val dy = y - g.ly
                 val far = hyp((x - g.sx).toDouble(), (y - g.sy).toDouble()) > 9
@@ -691,23 +786,38 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         const val M_BOX = 2
         const val M_PINCH = 3
         const val M_DEAD = 4
+        const val M_WALL = 5
     }
 }
 
 /** Мини-карта: показывает кадр, который готовит GameView, тап переносит камеру. */
 @SuppressLint("ViewConstructor")
 class MiniView(ctx: Context, val gv: GameView) : View(ctx) {
-    private val p = Paint()
-    private val dst = Rect()
-    private val border = Paint().apply { color = 0xff8a6a3a.toInt(); style = Paint.Style.STROKE }
+    private val p = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val dst = RectF()
+    private val pf = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ps = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val clip = Path()
+    private val rf = RectF()
 
     override fun onDraw(c: Canvas) {
-        val b = (2 * gv.dens)
-        c.drawColor(Color.BLACK)
-        dst.set(b.toInt(), b.toInt(), width - b.toInt(), height - b.toInt())
+        val d = gv.dens
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val r = 8 * d
+        // рамка: тёмное дерево, золотой кант
+        pf.color = 0xff1a110a.toInt(); rf.set(0f, 0f, w, h); c.drawRoundRect(rf, r, r, pf)
+        val b = 4 * d
+        dst.set(b, b, w - b, h - b)
+        clip.reset(); clip.addRoundRect(dst, r * 0.5f, r * 0.5f, Path.Direction.CW)
+        c.save(); c.clipPath(clip)
+        pf.color = 0xff1e1810.toInt(); c.drawRect(dst, pf)
         c.drawBitmap(gv.mini, null, dst, p)
-        border.strokeWidth = b
-        c.drawRect(b / 2, b / 2, width - b / 2, height - b / 2, border)
+        c.restore()
+        ps.strokeWidth = 1.6f * d; ps.color = 0xffd9a84a.toInt()
+        rf.set(ps.strokeWidth / 2, ps.strokeWidth / 2, w - ps.strokeWidth / 2, h - ps.strokeWidth / 2); c.drawRoundRect(rf, r, r, ps)
+        ps.strokeWidth = 1f * d; ps.color = 0x88ffe39a.toInt()
+        c.drawRoundRect(dst, r * 0.5f, r * 0.5f, ps)
     }
 
     @SuppressLint("ClickableViewAccessibility")

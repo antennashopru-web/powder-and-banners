@@ -1,0 +1,14 @@
+<!doctype html><html><body>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+window.THREE = THREE; window.SkeletonUtils = SkeletonUtils; window.SimplifyModifier = SimplifyModifier; window.BufferGeometryUtils = BufferGeometryUtils;
+const loader = new GLTFLoader();
+window.loadGLTF = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
+const add = (src, next) => { const s = document.createElement('script'); s.src = src; s.onload = next; document.body.appendChild(s); };
+add('models.js', () => add('kkmodels.js', () => add('dragon.js', () => add('walls.js', () => add('troops.js', () => add('uniforms.js', () => add('skf.js', () => add('soldier.js', () => add('skftrees.js', () => add('deco.js', () => add('bake3d.js', () => { window.READY = true; })))))))))));
+</script></body></html>

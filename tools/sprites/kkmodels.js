@@ -13,11 +13,16 @@ async function kkLoad() {
     for (let team = 0; team < 2; team++) KK.chars[n][team] = await loadGLTF('kk/chars/' + n + '.glb');
   }
   const L = async (p) => (await loadGLTF('kk/med/' + p + '.gltf')).scene;
-  const B = ['castle', 'home_A', 'market', 'barracks', 'archeryrange', 'blacksmith', 'tower_A', 'windmill'];
+  const B = ['castle', 'home_A', 'market', 'barracks', 'archeryrange', 'blacksmith', 'tower_A', 'windmill', 'lumbermill', 'church'];
   for (const b of B) KK.med[b] = [await L('buildings/blue/building_' + b + '_blue'), await L('buildings/red/building_' + b + '_red')];
-  for (const n of ['tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E', 'resource_stone', 'barrel', 'crate_A_big', 'sack', 'resource_lumber', 'wheelbarrow'])
-    KK.med[n] = await L('decoration/' + (/rock|tree/.test(n) ? 'nature/' : 'props/') + n);
+  for (const n of ['tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E', 'resource_stone', 'barrel', 'crate_A_big', 'sack', 'resource_lumber', 'wheelbarrow',
+    'trees_A_small', 'trees_A_medium', 'trees_B_small', 'trees_B_medium', 'waterlily_A', 'waterlily_B', 'waterplant_A', 'waterplant_B', 'waterplant_C',
+    'mountain_A_grass_trees', 'mountain_B_grass_trees', 'mountain_C_grass', 'hills_A_trees', 'hills_B_trees', 'hills_C_trees', 'tent', 'crate_long_A',
+    'flag_blue', 'flag_red', 'weaponrack', 'target', 'bucket_arrows', 'bucket_water', 'crate_B_big', 'crate_A_small', 'crate_open', 'pallet', 'ladder', 'crate_long_B'])
+    KK.med[n] = await L('decoration/' + (/^(rock|tree|water|mountain|hill)/.test(n) ? 'nature/' : 'props/') + n);
   KK.med.scaffold = await L('buildings/neutral/building_scaffolding');
+  KK.med.fence = await L('buildings/neutral/fence_wood_straight');
+  KK.med.well = [await L('buildings/blue/building_well_blue'), await L('buildings/red/building_well_red')];
   for (const n in KK.chars) for (let t = 0; t < 2; t++) recolorChar(KK.chars[n][t], n, t);
 }
 function hueOf(r, g, b) {
@@ -192,14 +197,69 @@ function fitModel(src, targetW, targetD, yScale) {
   const g = new THREE.Group(); g.add(obj); return g;
 }
 function place(g, src, size, x, z, ry, ys) { const o = fitModel(src, size, size, ys); o.position.x += x; o.position.z += z; o.rotation.y = ry || 0; g.add(o); return o; }
+// ---------------------------------------------------------------- двор: каменный цоколь, мощёная площадка, флаги и утварь
+const PLINTH = 2.2 / KY;   // высота площадки над землёй (в игре ×KY)
+function plinth(g, W, D, seed) {
+  // цоколь уходит в землю: на склоне холма видна каменная кладка, здание не висит в воздухе
+  const r = rng(seed), top = PLINTH, bot = -26 / KY;
+  const pad = mat(0x8a7a5e);
+  g.add(box(W - 4, top - bot, D - 4, pad, 0, (top + bot) / 2 - 0.15, 0));
+  const blocks = (len, along) => {
+    let a = -len / 2;
+    while (a < len / 2 - 0.5) {
+      const bl = Math.min(len / 2 - a, 5 + r() * 5);
+      for (let row = 0; row < 3; row++) {
+        const y0 = top - row * (top - bot) / 3, h = (top - bot) / 3 - 0.25;
+        const v = 0.48 + r() * 0.2, c = new THREE.Color(v * 0.97, v * 0.93, v * 0.86);
+        const m = mat(c.getHex());
+        const b = along(a + bl / 2, y0 - h / 2, bl - 0.5, h, m);
+        g.add(b);
+      }
+      a += bl;
+    }
+  };
+  blocks(W, (c, y, l, h, m) => box(l, h, 3.2, m, c, y, D / 2 - 1.6));
+  blocks(W, (c, y, l, h, m) => box(l, h, 3.2, m, c, y, -D / 2 + 1.6));
+  blocks(D - 6.4, (c, y, l, h, m) => box(3.2, h, l, m, W / 2 - 1.6, y, c));
+  blocks(D - 6.4, (c, y, l, h, m) => box(3.2, h, l, m, -W / 2 + 1.6, y, c));
+  // булыжники на площадке
+  for (let i = 0; i < 26; i++) {
+    const v = 0.5 + r() * 0.25, s = 2 + r() * 3;
+    g.add(box(s, 0.5, s * (0.7 + r() * 0.5), mat(new THREE.Color(v, v * 0.96, v * 0.9).getHex()), (r() - 0.5) * (W - 10), top + 0.1, (r() - 0.5) * (D - 10)));
+  }
+}
+function yard(t, model, W, props) {
+  const g = new THREE.Group();
+  plinth(g, W, W, 900 + W * 7 + (props ? props.length : 0));
+  model.position.y += PLINTH;
+  g.add(model);
+  for (const [name, size, x, z, ry] of props || []) {
+    const src = name === 'flag' ? KK.med[t ? 'flag_red' : 'flag_blue'] : name === 'well' ? KK.med.well[t] : KK.med[name];
+    let o;
+    if (name === 'flag') {
+      // флаг подбираем по высоте древка, а не по ширине полотнища
+      const bb = new THREE.Box3().setFromObject(src), sz = bb.getSize(new THREE.Vector3());
+      o = place(g, src, size * 2.2 * Math.max(sz.x, sz.z) / sz.y, x, z, ry);
+    } else o = place(g, src, size, x, z, ry);
+    o.position.y += PLINTH;
+  }
+  return g;
+}
 const KK_BLD = {
-  hall: (t) => fitModel(KK.med.castle[t], 104, 100),
-  house: (t) => fitModel(KK.med.home_A[t], 62, 62),
-  store: (t) => fitModel(KK.med.market[t], 72, 66),
-  barracks: (t) => fitModel(KK.med.barracks[t], 98, 96),
-  stable: (t) => fitModel(KK.med.archeryrange[t], 100, 96),
-  foundry: (t) => fitModel(KK.med.blacksmith[t], 98, 96),
-  tower: (t) => fitModel(KK.med.tower_A[t], 60, 60),
+  hall: (t) => yard(t, fitModel(KK.med.castle[t], 94, 90), 98, [['flag', 14, -42, 42], ['flag', 14, 42, 42], ['barrel', 7, -42, -36], ['barrel', 6, -36, -42], ['crate_B_big', 9, 40, -40, 0.4], ['well', 16, 38, 6]]),
+  house: (t) => yard(t, fitModel(KK.med.home_A[t], 52, 52), 64, [['barrel', 6, -26, 25], ['sack', 6, -20, 27], ['resource_lumber', 12, 24, -24, 1.2], ['bucket_water', 4, 25, 25]]),
+  store: (t) => yard(t, fitModel(KK.med.market[t], 62, 58), 64, [['crate_A_small', 6, 26, -26, 0.5], ['crate_B_big', 7, 20, -27], ['sack', 6, -26, -26], ['flag', 11, 27, 27]]),
+  barracks: (t) => yard(t, fitModel(KK.med.barracks[t], 90, 88), 98, [['flag', 14, -43, 43], ['flag', 14, 43, 43], ['weaponrack', 12, -42, -10, Math.PI / 2], ['weaponrack', 12, 42, -10, -Math.PI / 2], ['bucket_arrows', 6, -40, -40]]),
+  stable: (t) => yard(t, fitModel(KK.med.archeryrange[t], 90, 88), 98, [['flag', 14, 43, 43], ['sack', 7, -42, 40], ['sack', 6, -36, 43], ['wheelbarrow', 11, 40, -38, 0.8], ['target', 12, -42, -36, 0.3]]),
+  foundry: (t) => yard(t, fitModel(KK.med.blacksmith[t], 90, 88), 98, [['flag', 14, -43, 43], ['resource_stone', 12, 40, 40], ['crate_long_B', 12, -40, -38, 0.2], ['barrel', 7, 42, -40], ['pallet', 10, 30, -42, 0.1]]),
+  tower: (t) => yard(t, fitModel(KK.med.tower_A[t], 54, 54), 64, [['barrel', 6, 26, 26], ['crate_A_small', 5, -27, 27, 0.6], ['ladder', 10, -26, -24, 0.8]]),
+  arsenal: (t) => {
+    // мастерская оружейников: дом с пилами, рядом бочки с порохом и ящики
+    const m = fitModel(KK.med.lumbermill[t], 80, 80);
+    m.children[0].position.x -= 6; m.children[0].position.z -= 4;
+    return yard(t, m, 98, [['flag', 14, -43, 43], ['barrel', 8, 34, 26], ['barrel', 8, 40, 18], ['barrel', 7, 28, 34], ['crate_A_big', 11, -34, 30, 0.3], ['crate_A_big', 9, -24, 36, 0.9]]);
+  },
+  academy: (t) => yard(t, fitModel(KK.med.church[t], 86, 88), 98, [['flag', 14, -43, 43], ['flag', 14, 43, 43], ['crate_open', 9, 40, -40, 0.5], ['bucket_water', 5, -42, -40]]),
   farm: (t) => {
     const g = buildFarm(t);
     // убрать собственные хижину и мельницу, поставить мельницу KayKit
@@ -210,8 +270,10 @@ const KK_BLD = {
   },
 };
 function kkTree(k) {
-  const pine = k < 4, src = pine ? KK.med.tree_single_A : KK.med.tree_single_B;
-  const r = rng(500 + k), s = 0.85 + r() * 0.35;
+  // 0..3 хвойные, 4..7 лиственные: одиночные деревья и купы по 2–3 дерева
+  const pine = k < 4, j = k % 4;
+  const src = KK.med[pine ? ['tree_single_A', 'tree_single_A', 'trees_A_small', 'trees_A_medium'][j] : ['tree_single_B', 'tree_single_B', 'trees_B_small', 'trees_B_medium'][j]];
+  const r = rng(500 + k), s = (j < 2 ? 0.85 + r() * 0.35 : j === 2 ? 1.2 : 1.35);
   return fitModel(src, 27 * s, 27 * s, 1.0 + r() * 0.15);
 }
 function kkRocks(kind) {
@@ -255,13 +317,13 @@ function renderSet(makers, big, ax, ay) {
 function kkUnitAtlas(type, build) {
   const makers = [];
   for (let team = 0; team < 2; team++) for (let d = 0; d < 8; d++) FRAMES.forEach((fr) => makers.push(() => {
-    if (fr.kind === 'dead' && type === 'cav') {
+    if (fr.kind === 'dead' && (type === 'cav' || type === 'dragoon')) {
       const rotY = -d * Math.PI / 4, side = (d >= 2 && d <= 5) ? 1 : -1;
       const w = new THREE.Group(), inner = new THREE.Group(); inner.add(build(team, { kind: 'idle' })); w.add(inner);
       w.rotation.z = side * Math.PI / 2 * 0.95; w.position.set(side * 8, 4, 0); inner.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
       return [w, 0];
     }
-    return [build(team, fr.kind === 'dead' ? { kind: 'idle' } : fr), -d * Math.PI / 4];
+    return [build(team, fr.kind === 'dead' && type !== 'dragon' && type !== 'siege' ? { kind: 'idle' } : fr), -d * Math.PI / 4];
   }));
   const big = 360, R = renderSet(makers, big, big / 2, Math.round(big * 0.62)), cols = FRAMES.length;
   const atlas = document.createElement('canvas'); atlas.width = R.w * cols; atlas.height = R.h * 16;
@@ -276,9 +338,9 @@ function kkUnitAtlas(type, build) {
     let fw = Math.min(R.w - fx, bx[2] + 2 - R.x0 - fx), fh = Math.min(R.h - fy, bx[3] + 2 - R.y0 - fy);
     fw += fw & 1; fh += fh & 1; fw = Math.min(fw, R.w - fx); fh = Math.min(fh, R.h - fy);
     fr.push(fx, fy, fw, fh);
-    if (type === 'cannon' && f === 8) { ag.save(); ag.globalAlpha = 0.85; ag.filter = 'brightness(0.55) sepia(0.4)'; }
+    if ((type === 'cannon' || type === 'mortar' || type === 'siege') && f === 8) { ag.save(); ag.globalAlpha = 0.85; ag.filter = 'brightness(0.55) sepia(0.4)'; }
     ag.drawImage(c, R.x0, R.y0, R.w, R.h, f * R.w, row * R.h, R.w, R.h);
-    if (type === 'cannon' && f === 8) ag.restore();
+    if ((type === 'cannon' || type === 'mortar' || type === 'siege') && f === 8) ag.restore();
   });
   return { url: atlas.toDataURL('image/png'), meta: { cw: R.w / S, ch: R.h / S, ax: R.ax / S, ay: R.ay / S, cols, scale: S, fr } };
 }
@@ -307,9 +369,9 @@ function kkNature() {
 window.kkRenderAll = async function (only) {
   await kkLoad();
   const res = { units: {}, blds: {} };
-  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon };
+  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon, grenadier: kkGrenadier, dragoon: kkDragoon, mortar: kkMortar, hero: kkHero, siege: kkSiege };
   for (const t in U) if (!only || only.includes(t)) res.units[t] = kkUnitAtlas(t, U[t]);
-  if (!only || only.includes('blds')) res.blds = kkBuildingAtlas();
+  if (!only || only.includes('blds')) { res.blds = kkBuildingAtlas(); if (typeof kkWallParts === 'function') res.wallparts = kkWallParts(); }
   if (!only || only.includes('nature')) Object.assign(res, kkNature());
   return res;
 };
