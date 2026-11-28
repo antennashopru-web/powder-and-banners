@@ -112,6 +112,10 @@ jobs:
             adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ei speed 1 --ez troops true --ef zoom 1.35 --ez gfx2d true
             sleep 13
             adb exec-out screencap -p > shots/12-troops-2d.png
+            adb shell am force-stop ru.argeda.powder
+            adb shell am start -n ru.argeda.powder/.MainActivity --ei oldbuild 1
+            sleep 25
+            adb exec-out screencap -p > shots/13-update.png
             adb logcat -d > shots/logcat.txt || true
 
       - uses: actions/upload-artifact@v4

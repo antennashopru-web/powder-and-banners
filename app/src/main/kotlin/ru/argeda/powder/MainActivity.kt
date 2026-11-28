@@ -251,6 +251,8 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         refreshContinue()
         // для проверки на эмуляторе: am start ... --ei start 1 --ez autopilot true --ei speed 3
         val it = intent
+        if (it != null && it.hasExtra("oldbuild")) Updater.pretend = it.getIntExtra("oldbuild", 0).toLong()
+        if (it == null || !it.hasExtra("start")) Updater.check(this, false)
         if (it != null && it.hasExtra("start")) {
             optDiff = it.getIntExtra("start", 1).coerceIn(0, 2)
             optSize = it.getIntExtra("size", 80)
@@ -536,6 +538,10 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         c.addView(help, LinearLayout.LayoutParams(MP, WC))
         c.addView(tv("ARGEDA — сделаем мир лучше", 12.5f, GILT).apply {
             setTypeface(serif, Typeface.ITALIC); letterSpacing = 0.06f; alpha = 0.85f; setPadding(0, dp(8), 0, 0)
+        })
+        c.addView(tv("Сборка " + Updater.installed(this) + " · проверить обновление", 12.5f, GILT).apply {
+            alpha = 0.85f; setPadding(0, dp(8), 0, dp(4)); paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
+            setOnClickListener { Updater.check(this@MainActivity, true) }
         })
         menu = screen(c, true)
         root.addView(menu, lp(MP, MP))
