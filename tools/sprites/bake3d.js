@@ -63,9 +63,9 @@ function bakeFrame(root, withColor) {
         const ii = [0, 1, 2].map((q) => idx ? idx[pt.start + k + q] : pt.start + k + q);
         let U = ii.map((i) => uv.getX(i)), V = ii.map((i) => uv.getY(i));
         if (base.m.map.flipY) V = V.map((v) => 1 - v);
-        // треугольник целиком внутрь [0,1]: сдвиг на целое, затем зажим
+        // сдвиг на целое: uv от нуля; повторы текстуры (uv больше 1) раскладываются в атласе плиткой
         const su = Math.floor(Math.min(...U)), sv = Math.floor(Math.min(...V));
-        for (let q = 0; q < 3; q++) UV.push(Math.min(1, Math.max(0, U[q] - su)), Math.min(1, Math.max(0, V[q] - sv)));
+        for (let q = 0; q < 3; q++) UV.push(Math.max(0, U[q] - su), Math.max(0, V[q] - sv));
         TX.push(base.m.map);
       }
     }
@@ -100,11 +100,21 @@ function buildAtlas(UV, TX) {
   const texs = [...new Set(TX.filter((t) => t))];
   if (!texs.length) return null;
   const g = Math.ceil(Math.sqrt(texs.length)), cs = ATLAS / g, m = 6;
+  // сколько раз текстура повторяется на самом «длинном» треугольнике (не больше ATLAS_REP)
+  const rep = texs.map(() => 1);
+  for (let tri = 0; tri < TX.length; tri++) {
+    const k = texs.indexOf(TX[tri]); if (k < 0) continue;
+    for (let q = 0; q < 6; q++) rep[k] = Math.max(rep[k], Math.min(ATLAS_REP, Math.ceil(UV[tri * 6 + q] - 1e-4)));
+  }
   const cv = document.createElement('canvas'); cv.width = cv.height = ATLAS;
   const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, ATLAS, ATLAS);
   texs.forEach((t, k) => {
-    const x = (k % g) * cs, y = Math.floor(k / g) * cs;
-    cx.drawImage(t.image, x, y, cs, cs);
+    const x = (k % g) * cs, y = Math.floor(k / g) * cs, K = rep[k], ts = (cs - 2 * m) / K;
+    cx.save(); cx.beginPath(); cx.rect(x, y, cs, cs); cx.clip();
+    if (t.userData && t.userData.gain) cx.filter = 'brightness(' + t.userData.gain + ')';
+    // плитка K×K и ещё ряд вокруг: поля клетки заполнены продолжением текстуры, швов не видно
+    for (let i = -1; i <= K; i++) for (let j = -1; j <= K; j++) cx.drawImage(t.image, x + m + i * ts, y + m + j * ts, ts + 0.5, ts + 0.5);
+    cx.restore();
   });
   const out = new Float32Array(UV.length);
   for (let tri = 0; tri < TX.length; tri++) {
@@ -112,12 +122,13 @@ function buildAtlas(UV, TX) {
     for (let q = 0; q < 3; q++) {
       const j = (tri * 3 + q) * 2;
       if (!t) { out[j] = -1; out[j + 1] = -1; continue; }
-      const k = texs.indexOf(t), x = (k % g) * cs, y = Math.floor(k / g) * cs;
-      out[j] = (x + m + UV[j] * (cs - 2 * m)) / ATLAS; out[j + 1] = (y + m + UV[j + 1] * (cs - 2 * m)) / ATLAS;
+      const k = texs.indexOf(t), x = (k % g) * cs, y = Math.floor(k / g) * cs, K = rep[k];
+      out[j] = (x + m + Math.min(K, UV[j]) / K * (cs - 2 * m)) / ATLAS; out[j + 1] = (y + m + Math.min(K, UV[j + 1]) / K * (cs - 2 * m)) / ATLAS;
     }
   }
   return { uv: out, url: cv.toDataURL('image/jpeg', 0.86) };
 }
+const ATLAS_REP = 4;
 function enc16uv(arr) { const o = new Int16Array(arr.length); for (let i = 0; i < arr.length; i++) o[i] = arr[i] < 0 ? -32767 : Math.round(arr[i] * 32767); return o; }
 
 function enc16(arr) { const o = new Int16Array(arr.length); for (let i = 0; i < arr.length; i++) o[i] = Math.max(-32767, Math.min(32767, Math.round(arr[i] * BAKE_Q))); return o; }

@@ -27,7 +27,14 @@
 | Здание | Цена | Что даёт |
 |---|---|---|
 | Ратуша | 🌲300 ⛰️200 | крестьяне, приём добычи, +15 населения, стреляет |
-| Дом | 🌲60 | +10 населения |
+| Ратуша | [Rauma Town Hall](https://sketchfab.com/3d-models/rauma-town-hall-e2c47838ebde464bbcea521c0ff5ce9e) | Karumaki |
+| Дом | [Half-timbered House](https://sketchfab.com/3d-models/half-timbered-house-5fe4f1fd877f4ebd884c1c0248b28e20) | Kovonic |
+| Склад | [Old European House](https://sketchfab.com/3d-models/old-european-house-game-ready-ec96a821b1f142869b39b327698b68a5) | Valkirin1 |
+| Казарма | [Viking town Hall](https://sketchfab.com/3d-models/viking-town-hall-2b2a4053721c4afe9651662f449587e7) | Bucks (Its_Bucks) |
+| Конюшня | [Old Wooden Barn (House 4)](https://sketchfab.com/3d-models/old-wooden-barn-house-4-3366ee69c2dd4908a99f386e07faa1d6) | Blenderust (narighillya) |
+| Литейная | [Old Smithy](https://sketchfab.com/3d-models/old-smithy-6e8297ae714547448cc6f7da8acbb247) | lucasprs51450 |
+| Арсенал | [Medieval house, Generic Textures](https://sketchfab.com/3d-models/medieval-house-generic-textures-game-ready-3eb9e3b600264e2f99100fc43619497e) | by__Rx |
+| Академия | [Low Poly Medieval Gothic Church](https://sketchfab.com/3d-models/low-poly-medieval-gothic-church-b5eaf6f238b1490a80c682ed238a7230) | AlexFerrart3D |
 | Ферма | 🌲80 | еда, до 6 крестьян |
 | Склад | 🌲100 | приём добычи ближе к лесу и шахтам |
 | Казарма | 🌲150 ⛰️50 | пикинёры, мушкетёры |

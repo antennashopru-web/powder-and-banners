@@ -531,7 +531,9 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         for (p in ps) help.addView(tv(html(p), 13.5f).apply { setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0) })
         help.addView(tv(html("<b>Графика:</b> 3D-модели персонажей и зданий — KayKit (Kay Lousberg, www.kaylousberg.com), лицензия CC0. Пики, мушкеты и мундиры — свои." +
             "<br><b>Модели со Sketchfab (лицензия CC BY 4.0):</b> солдаты — «European Soldier 17th Century», HaiPham; пушка — «Canon 17th Century», iZnoGouD; мортира — «Cannon Low-Poly», derdaryen; " +
-            "конь — «Horse», MAXDESIGN-3D; дом — «Medieval House Low Poly», SantyFrow; башня — «Medieval Tower», Den (dfomenco); " +
+            "конь — «Horse», MAXDESIGN-3D; ратуша — «Rauma Town Hall», Karumaki; дом — «Half-timbered House», Kovonic; склад — «Old European House», Valkirin1; казарма — «Viking town Hall», Bucks (Its_Bucks); " +
+            "конюшня — «Old Wooden Barn (House 4)», Blenderust (narighillya); литейная — «Old Smithy», lucasprs51450; арсенал — «Medieval house, Generic Textures», by__Rx; академия — «Low Poly Medieval Gothic Church», AlexFerrart3D; " +
+            "башня — «Medieval Tower», Den (dfomenco); " +
             "мельница — «Windmill Low Poly», Aegis_Wolf. Модели уменьшены и подогнаны под игру, добавлены цвета команд."), 12f).apply {
             alpha = 0.75f; setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0)
         })

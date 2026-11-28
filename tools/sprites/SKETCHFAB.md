@@ -10,7 +10,14 @@
 | cannon.glb | [Canon 17th Century](https://sketchfab.com/3d-models/canon-17th-century-5ce4c3b2ece04e6c960ce14dd12bb0fe) | iZnoGouD | 5ce4c3b2ece04e6c960ce14dd12bb0fe |
 | mortar.glb | [Cannon Low-Poly](https://sketchfab.com/3d-models/cannon-low-poly-34bdf984f4424a87af5b9e44ffb31859) | derdaryen | 34bdf984f4424a87af5b9e44ffb31859 |
 | horse.glb | [Horse](https://sketchfab.com/3d-models/horse-6d0f9c1ce82f41048a282b6c47a50684) | MAXDESIGN-3D | 6d0f9c1ce82f41048a282b6c47a50684 |
-| house.glb | [Medieval House Low Poly](https://sketchfab.com/3d-models/medieval-house-low-poly-dd992c6d1aee4b1186aaab296f5727fe) | SantyFrow | dd992c6d1aee4b1186aaab296f5727fe |
+| hall.glb | [Rauma Town Hall](https://sketchfab.com/3d-models/rauma-town-hall-e2c47838ebde464bbcea521c0ff5ce9e) | Karumaki | e2c47838ebde464bbcea521c0ff5ce9e |
+| house.glb | [Half-timbered House](https://sketchfab.com/3d-models/half-timbered-house-5fe4f1fd877f4ebd884c1c0248b28e20) | Kovonic | 5fe4f1fd877f4ebd884c1c0248b28e20 |
+| store.glb | [Old European House](https://sketchfab.com/3d-models/old-european-house-game-ready-ec96a821b1f142869b39b327698b68a5) | Valkirin1 | ec96a821b1f142869b39b327698b68a5 |
+| barracks.glb | [Viking town Hall](https://sketchfab.com/3d-models/viking-town-hall-2b2a4053721c4afe9651662f449587e7) | Bucks (Its_Bucks) | 2b2a4053721c4afe9651662f449587e7 |
+| stable.glb | [Old Wooden Barn (House 4)](https://sketchfab.com/3d-models/old-wooden-barn-house-4-3366ee69c2dd4908a99f386e07faa1d6) | Blenderust (narighillya) | 3366ee69c2dd4908a99f386e07faa1d6 |
+| foundry.glb | [Old Smithy](https://sketchfab.com/3d-models/old-smithy-6e8297ae714547448cc6f7da8acbb247) | lucasprs51450 | 6e8297ae714547448cc6f7da8acbb247 |
+| arsenal.glb | [Medieval house, Generic Textures](https://sketchfab.com/3d-models/medieval-house-generic-textures-game-ready-3eb9e3b600264e2f99100fc43619497e) | by__Rx | 3eb9e3b600264e2f99100fc43619497e |
+| academy.glb | [Low Poly Medieval Gothic Church](https://sketchfab.com/3d-models/low-poly-medieval-gothic-church-b5eaf6f238b1490a80c682ed238a7230) | AlexFerrart3D | b5eaf6f238b1490a80c682ed238a7230 |
 | tower.glb | [Medieval Tower](https://sketchfab.com/3d-models/medieval-tower-6c821f2aae3b4e8db5d94c6f48fb568b) | Den (dfomenco) | 6c821f2aae3b4e8db5d94c6f48fb568b |
 | mill.glb | [Windmill Low Poly](https://sketchfab.com/3d-models/windmill-low-poly-36e96a2d6a944ad3ac75964022638ad3) | Aegis_Wolf | 36e96a2d6a944ad3ac75964022638ad3 |
 

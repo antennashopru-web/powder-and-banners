@@ -1,9 +1,9 @@
 /* Модели со Sketchfab под лицензией CC BY 4.0 (авторы перечислены в SKETCHFAB.md и в игре, «Авторы»).
-   Подключается после uniforms.js: пушка, мортира, конь, дом, башня и мельница.
+   Подключается после uniforms.js: пушка, мортира, конь, все основные здания, башня и мельница.
    Модели скачиваются в skf/ скриптом fetch-sketchfab.py (нужен свой токен Sketchfab). */
 'use strict';
 const SKF = {};
-const SKF_LIST = ['cannon', 'mortar', 'horse', 'house', 'tower', 'mill'];
+const SKF_LIST = ['cannon', 'mortar', 'horse', 'house', 'tower', 'mill', 'hall', 'store', 'barracks', 'stable', 'foundry', 'arsenal', 'academy'];
 async function skfLoad() {
   for (const n of SKF_LIST) if (!SKF[n]) SKF[n] = await loadGLTF('skf/' + n + '.glb');
 }
@@ -116,7 +116,30 @@ function horse(color, cloth, ph, gallop) {
 const SKF_SADDLE = { dx: 0, dy: 0, w: 2.9 };
 
 // ---------------------------------------------------------------- здания: дом, башня, мельница на ферме
-KK_BLD.house = (t) => yard(t, fitModel(skfClone('house'), 54, 50), 64, [['barrel', 6, -26, 25], ['sack', 6, -20, 27], ['resource_lumber', 12, 24, -24, 1.2], ['bucket_water', 4, 25, 25], ['flag', 10, -27, -8]]);
+// здание со Sketchfab: повернуть входом к игроку и вписать в площадку
+const SKF_BROT = { stable: Math.PI / 2 };
+// тёмные текстуры под ярким солнцем автора в игре выглядят чёрными: осветляем при запекании
+const SKF_GAIN = { hall: 1.4, house: 1.25, store: 1.7, barracks: 1.5, stable: 1.35, foundry: 1.25, arsenal: 1.35, academy: 1.1 };
+function skfBld(name, w, d) {
+  // подложки-«земля» из исходной сцены (плоскость без текстуры) не нужны
+  const r = new THREE.Group(); r.rotation.y = SKF_BROT[name] || 0; r.add(skfClone(name, (m) => !!m.material.map || m.geometry.attributes.position.count > 8)); r.updateMatrixWorld(true);
+  // в 3D осветляется атлас (bake3d.js), в 2D-спрайтах — цвет материала
+  const gain = SKF_GAIN[name] || 1, baking = typeof bakeFrame === 'function';
+  r.traverse((m) => {
+    if (!m.isMesh || !m.material.map) return;
+    m.material.map.userData.gain = gain;
+    if (!baking) { m.material = m.material.clone(); m.material.color.multiplyScalar(gain); }
+  });
+  return fitModel(r, w, d);
+}
+KK_BLD.hall = (t) => yard(t, skfBld('hall', 90, 86), 98, [['flag', 14, -42, 42], ['flag', 14, 42, 42], ['barrel', 7, -42, -36], ['barrel', 6, -36, -42], ['crate_B_big', 9, 40, -40, 0.4], ['well', 16, 40, 8]]);
+KK_BLD.house = (t) => yard(t, skfBld('house', 54, 50), 64, [['barrel', 6, -26, 25], ['sack', 6, -20, 27], ['resource_lumber', 12, 24, -24, 1.2], ['bucket_water', 4, 25, 25], ['flag', 10, -27, -8]]);
+KK_BLD.store = (t) => yard(t, skfBld('store', 56, 52), 64, [['crate_A_small', 6, 26, -26, 0.5], ['crate_B_big', 7, 20, -27], ['sack', 6, -26, -26], ['flag', 11, 27, 27]]);
+KK_BLD.barracks = (t) => yard(t, skfBld('barracks', 86, 84), 98, [['flag', 14, -43, 43], ['flag', 14, 43, 43], ['weaponrack', 12, -42, -10, Math.PI / 2], ['weaponrack', 12, 42, -10, -Math.PI / 2], ['bucket_arrows', 6, -40, -40]]);
+KK_BLD.stable = (t) => yard(t, skfBld('stable', 86, 84), 98, [['flag', 14, 43, 43], ['sack', 7, -42, 40], ['sack', 6, -36, 43], ['wheelbarrow', 11, 40, -38, 0.8]]);
+KK_BLD.foundry = (t) => yard(t, skfBld('foundry', 84, 82), 98, [['flag', 14, -43, 43], ['resource_stone', 12, 40, 40], ['crate_long_B', 12, -40, -38, 0.2], ['barrel', 7, 42, -40], ['pallet', 10, 30, -42, 0.1]]);
+KK_BLD.arsenal = (t) => yard(t, skfBld('arsenal', 82, 80), 98, [['flag', 14, -43, 43], ['barrel', 8, 40, 30], ['barrel', 8, 43, 20], ['barrel', 7, 34, 40], ['crate_A_big', 11, -40, 36, 0.3]]);
+KK_BLD.academy = (t) => yard(t, skfBld('academy', 88, 86), 98, [['flag', 14, -43, 43], ['flag', 14, 43, 43]]);
 KK_BLD.tower = (t) => yard(t, fitModel(skfClone('tower'), 32, 32), 64, [['barrel', 6, 26, 26], ['crate_A_small', 5, -27, 27, 0.6], ['ladder', 10, -26, -24, 0.8], ['flag', 12, 25, -20]]);
 {
   const farm = KK_BLD.farm;
