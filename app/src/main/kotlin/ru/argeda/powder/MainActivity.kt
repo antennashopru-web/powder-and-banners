@@ -320,7 +320,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 }
                 if (it.hasExtra("zoom") && !it.getBooleanExtra("troops", false)) { g.camZ = it.getFloatExtra("zoom", 1f).toDouble().coerceIn(0.45, 2.0); g.clampCam() }
             }
-        } else startDemo()
+        } else if (it == null || !it.hasExtra("mission")) startDemo()
     }
 
     /** за меню идёт живое сражение двух ИИ */
