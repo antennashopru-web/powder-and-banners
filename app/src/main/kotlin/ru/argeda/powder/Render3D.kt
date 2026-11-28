@@ -194,6 +194,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
     private var lowTex = 0
     private var hgtTex = 0
     private var detTex = 0
+    private var whiteTex = 0
     /** серая бесшовная фактура травы; null — без неё */
     var detail: Bitmap? = null
     private var dummyFog = true
@@ -228,7 +229,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
 
     private fun create() {
         chunkTex.clear(); gen = -1
-        pModel = prog(VS_MODEL, FS_MODEL, uM, "uVP", "uLVP", "uPos", "uRows", "uShadow", "uFog", "uLight", "uMap")
+        pModel = prog(VS_MODEL, FS_MODEL, uM, "uVP", "uLVP", "uPos", "uRows", "uShadow", "uFog", "uLight", "uMap", "uAlb")
         pShadow = prog(VS_MODEL_SHADOW, FS_EMPTY, uS, "uLVP", "uPos", "uRows")
         pGround = prog(VS_GROUND, FS_GROUND, uG, "uVP", "uLVP", "uRect", "uUV", "uTex", "uShadow", "uFog", "uWater", "uMap", "uTime", "uHgt", "uAmp", "uLight", "uDet")
         pDecal = prog(VS_DECAL, FS_DECAL, uD, "uVP", "uFog", "uMap", "uHgt", "uAmp")
@@ -274,6 +275,23 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.ibo)
             m.idx.position(0)
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, m.tris * 3 * 2, m.idx, GL_STATIC_DRAW)
+            m.uvbo = 0; m.albTex = 0
+            val uvb = m.uv; val alb = m.alb
+            if (uvb != null && alb != null && !alb.isRecycled) {
+                glGenBuffers(1, ids, 0); m.uvbo = ids[0]
+                glBindBuffer(GL_ARRAY_BUFFER, m.uvbo)
+                uvb.position(0)
+                glBufferData(GL_ARRAY_BUFFER, m.n * 4, uvb, GL_STATIC_DRAW)
+                glGenTextures(1, ids, 0); m.albTex = ids[0]
+                glBindTexture(GL_TEXTURE_2D, m.albTex)
+                GLUtils.texImage2D(GL_TEXTURE_2D, 0, alb, 0)
+                glGenerateMipmap(GL_TEXTURE_2D)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+                if (aniso > 1f) glTexParameterf(GL_TEXTURE_2D, 0x84FE, aniso)
+            }
             for (t in m.colors.indices) {
                 glGenBuffers(1, ids, 0); m.cvbo[t] = ids[0]
                 glBindBuffer(GL_ARRAY_BUFFER, m.cvbo[t])
@@ -288,6 +306,8 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
                 glEnableVertexAttribArray(0); glVertexAttribPointer(0, 3, GL_UNSIGNED_BYTE, true, 3, 0)
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.ibo)
                 for (l in 1..3) { glEnableVertexAttribArray(l); glVertexAttribDivisor(l, 1) }
+                if (m.uvbo != 0) { glBindBuffer(GL_ARRAY_BUFFER, m.uvbo); glEnableVertexAttribArray(4); glVertexAttribPointer(4, 2, GL_SHORT, true, 4, 0) }
+                else glDisableVertexAttribArray(4)
                 glBindVertexArray(0)
             }
             glGenTextures(1, ids, 0); m.tex = ids[0]
@@ -299,6 +319,13 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
         }
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4)
+        glGenTextures(1, ids, 0); whiteTex = ids[0]
+        glBindTexture(GL_TEXTURE_2D, whiteTex)
+        run {
+            val px = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder()); px.put(byteArrayOf(-1, -1, -1, -1)); px.flip()
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, px)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        }
         // карта теней
         glGenTextures(1, ids, 0); shadowTex = ids[0]
         glBindTexture(GL_TEXTURE_2D, shadowTex)
@@ -433,7 +460,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glUseProgram(pModel)
         glUniformMatrix4fv(uM["uVP"]!!, 1, false, f.vp, 0)
         glUniformMatrix4fv(uM["uLVP"]!!, 1, false, f.lvp, 0)
-        glUniform1i(uM["uPos"]!!, 0); glUniform1i(uM["uShadow"]!!, 1); glUniform1i(uM["uFog"]!!, 2)
+        glUniform1i(uM["uPos"]!!, 0); glUniform1i(uM["uShadow"]!!, 1); glUniform1i(uM["uFog"]!!, 2); glUniform1i(uM["uAlb"]!!, 6)
         glUniform3f(uM["uLight"]!!, Cam3D.LX, Cam3D.LY, Cam3D.LZ)
         glUniform2f(uM["uMap"]!!, f.mapW, f.mapH)
         glActiveTexture(GL_TEXTURE0)
@@ -464,6 +491,9 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glVertexAttribPointer(1, 4, GL_FLOAT, false, INST * 4, off)
         glVertexAttribPointer(2, 4, GL_FLOAT, false, INST * 4, off + 16)
         glVertexAttribPointer(3, 3, GL_FLOAT, false, INST * 4, off + 32)
+        if (m.uvbo == 0) glVertexAttrib2f(4, -1f, -1f)
+        glActiveTexture(GL_TEXTURE6); glBindTexture(GL_TEXTURE_2D, if (m.albTex != 0) m.albTex else whiteTex)
+        glActiveTexture(GL_TEXTURE0)
         glBindTexture(GL_TEXTURE_2D, m.tex)
         glUniform1i(uRows, m.rows)
         glDrawElementsInstanced(GL_TRIANGLES, m.tris * 3, GL_UNSIGNED_SHORT, 0, f.bCount[b])
@@ -550,6 +580,7 @@ layout(location=0) in vec3 aCol;
 layout(location=1) in vec4 iA;
 layout(location=2) in vec4 iB;
 layout(location=3) in vec3 iC;
+layout(location=4) in vec2 aUV;
 uniform isampler2D uPos;
 uniform int uRows;
 uniform mat4 uLVP;
@@ -566,10 +597,10 @@ vec3 world() {
 """
         const val VS_MODEL = MODEL_COMMON + """
 uniform mat4 uVP;
-out vec3 vCol; out vec3 vW; out vec4 vL; flat out vec2 vC;
+out vec3 vCol; out vec3 vW; out vec4 vL; flat out vec2 vC; out vec2 vUV;
 void main() {
   vec3 w = world();
-  vW = w; vCol = aCol; vC = iC.xy; vL = uLVP * vec4(w, 1.0);
+  vW = w; vCol = aCol; vC = iC.xy; vL = uLVP * vec4(w, 1.0); vUV = aUV;
   gl_Position = uVP * vec4(w, 1.0);
 }
 """
@@ -593,7 +624,8 @@ float shade(vec4 l) {
         const val FS_MODEL = """#version 300 es
 precision highp float;
 precision highp sampler2DShadow;
-in vec3 vCol; in vec3 vW; in vec4 vL; flat in vec2 vC;
+in vec3 vCol; in vec3 vW; in vec4 vL; flat in vec2 vC; in vec2 vUV;
+uniform sampler2D uAlb;
 uniform sampler2DShadow uShadow;
 uniform sampler2D uFog;
 uniform vec3 uLight;
@@ -604,7 +636,9 @@ void main() {
   vec3 n = normalize(cross(dFdx(vW), dFdy(vW)));
   float d = max(dot(n, uLight), 0.0) * shade(vL);
   float hemi = 0.5 + 0.5 * n.y;
-  vec3 col = vCol * (vec3(0.30, 0.31, 0.36) + vec3(0.26, 0.25, 0.22) * hemi + vec3(0.78, 0.72, 0.60) * d);
+  vec3 base = vCol;
+  if (vUV.x >= 0.0) base *= texture(uAlb, vUV).rgb;
+  vec3 col = base * (vec3(0.30, 0.31, 0.36) + vec3(0.26, 0.25, 0.22) * hemi + vec3(0.78, 0.72, 0.60) * d);
   if (vC.x > 0.5) {
     vec3 tc = vC.x < 1.5 ? vec3(0.45, 1.0, 0.45) : vC.x < 2.5 ? vec3(1.0, 0.35, 0.3) : vec3(1.0, 0.95, 0.8);
     col = mix(col, tc, 0.45);

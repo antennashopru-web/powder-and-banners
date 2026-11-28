@@ -15,7 +15,11 @@ import java.nio.ShortBuffer
 class Model3D(
     val name: String, val n: Int, val tris: Int, val frames: Int, val rows: Int,
     val idx: ByteBuffer, val colors: List<ByteBuffer>, val pos: ShortBuffer,
+    /** текстурные координаты (int16, нормированные; <0 — без текстуры) и атлас текстур модели */
+    val uv: ByteBuffer? = null, val alb: android.graphics.Bitmap? = null,
 ) {
+    var uvbo = 0
+    var albTex = 0
     // объекты OpenGL (заполняет поток отрисовки)
     var ibo = 0
     val cvbo = IntArray(2)
@@ -80,7 +84,11 @@ object Models3D {
                 for (i in 0 until n * 3) pos.put(bin.getShort(off + i * 2))
             }
             pos.position(0)
-            Model3D(name, n, tris, frames, rows, ib, cols, pos)
+            val uv = if (j.has("uv")) slice(j.getInt("uv"), n * 2 * 2) else null
+            val alb = if (uv != null && j.has("tex")) try {
+                assets.open("models/" + j.getString("tex")).use { android.graphics.BitmapFactory.decodeStream(it) }
+            } catch (e: Exception) { null } else null
+            Model3D(name, n, tris, frames, rows, ib, cols, pos, if (alb != null) uv else null, alb)
         }.toTypedArray()
     }
 }

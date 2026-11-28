@@ -64,13 +64,13 @@
 см. `tools/sprites/README.md`.
 
 Модели со Sketchfab, лицензия **CC BY 4.0** (https://creativecommons.org/licenses/by/4.0/). Изменения: уменьшены,
-цвета текстур запечены в вершины, добавлены цвета команд, конь перекрашен. Список и ссылки — `tools/sprites/SKETCHFAB.md`.
+текстуры собраны в атлас, добавлены цвета команд, седло и чепрак у коня. Список и ссылки — `tools/sprites/SKETCHFAB.md`.
 
 | Что в игре | Модель | Автор |
 |---|---|---|
-| Пушка | [Medieval Mortar](https://sketchfab.com/3d-models/medieval-mortar-cb4f561457084ba4ab6704f5139a3c5c) | José Luis Ruiz |
+| Пушка | [Canon 17th Century](https://sketchfab.com/3d-models/canon-17th-century-5ce4c3b2ece04e6c960ce14dd12bb0fe) | iZnoGouD |
 | Мортира | [Cannon Low-Poly](https://sketchfab.com/3d-models/cannon-low-poly-34bdf984f4424a87af5b9e44ffb31859) | derdaryen |
-| Конь (рейтары, драгуны) | [Low-Poly Horse](https://sketchfab.com/3d-models/low-poly-horse-d1ca14c1befe47c8a4686d2f64c82f45) | antemeossa |
+| Конь (рейтары, драгуны) | [Horse](https://sketchfab.com/3d-models/horse-6d0f9c1ce82f41048a282b6c47a50684) | MAXDESIGN-3D |
 | Дом | [Medieval House Low Poly](https://sketchfab.com/3d-models/medieval-house-low-poly-dd992c6d1aee4b1186aaab296f5727fe) | SantyFrow |
 | Башня | [Medieval Tower](https://sketchfab.com/3d-models/medieval-tower-6c821f2aae3b4e8db5d94c6f48fb568b) | Den (dfomenco) |
 | Мельница на ферме | [Windmill Low Poly](https://sketchfab.com/3d-models/windmill-low-poly-36e96a2d6a944ad3ac75964022638ad3) | Aegis_Wolf |

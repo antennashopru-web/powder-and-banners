@@ -2,8 +2,8 @@
 """Скачивает модели со Sketchfab (CC BY 4.0) в skf/. Токен берётся из SKETCHFAB_TOKEN и отправляется только на api.sketchfab.com."""
 import json, os, sys, time, urllib.request
 MODELS = {
-    'cannon': 'cb4f561457084ba4ab6704f5139a3c5c', 'mortar': '34bdf984f4424a87af5b9e44ffb31859',
-    'horse': 'd1ca14c1befe47c8a4686d2f64c82f45', 'house': 'dd992c6d1aee4b1186aaab296f5727fe',
+    'cannon': '5ce4c3b2ece04e6c960ce14dd12bb0fe', 'mortar': '34bdf984f4424a87af5b9e44ffb31859',
+    'horse': '6d0f9c1ce82f41048a282b6c47a50684', 'house': 'dd992c6d1aee4b1186aaab296f5727fe',
     'tower': '6c821f2aae3b4e8db5d94c6f48fb568b', 'mill': '36e96a2d6a944ad3ac75964022638ad3',
 }
 tok = os.environ.get('SKETCHFAB_TOKEN') or sys.exit('нужен SKETCHFAB_TOKEN')

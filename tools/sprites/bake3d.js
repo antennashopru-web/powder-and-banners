@@ -42,7 +42,7 @@ function parts(root) {
 
 // один кадр: позиции и нормали всех вершин (без индексации, по треугольникам)
 function bakeFrame(root, withColor) {
-  const P = [], N = [], C = [];
+  const P = [], N = [], C = [], UV = [], TX = [];
   const v = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   const nrm = new THREE.Vector3(), nm = new THREE.Matrix3();
   for (const pt of parts(root)) {
@@ -56,29 +56,28 @@ function bakeFrame(root, withColor) {
       base = { m, r: cc.r, g: cc.g, b: cc.b, er: em.r, eg: em.g, eb: em.b };
     }
     const tri = [];
+    const textured = !!(base && base.m.map && uv && o.userData.triAvg && base.m.map.image);
+    if (withColor) {
+      for (let k = 0; k + 2 < pt.count; k += 3) {
+        if (!textured) { for (let q = 0; q < 6; q++) UV.push(-1); TX.push(null); continue; }
+        const ii = [0, 1, 2].map((q) => idx ? idx[pt.start + k + q] : pt.start + k + q);
+        let U = ii.map((i) => uv.getX(i)), V = ii.map((i) => uv.getY(i));
+        if (base.m.map.flipY) V = V.map((v) => 1 - v);
+        // треугольник целиком внутрь [0,1]: сдвиг на целое, затем зажим
+        const su = Math.floor(Math.min(...U)), sv = Math.floor(Math.min(...V));
+        for (let q = 0; q < 3; q++) UV.push(Math.min(1, Math.max(0, U[q] - su)), Math.min(1, Math.max(0, V[q] - sv)));
+        TX.push(base.m.map);
+      }
+    }
     for (let k = 0; k < pt.count; k++) {
       const i = idx ? idx[pt.start + k] : pt.start + k;
       o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld);
       tri.push(v.x, v.y, v.z);
       if (base) {
         let r = base.r, g = base.g, bl = base.b;
-        if (base.m.map && uv) { const s = sample(base.m.map, uv.getX(i), uv.getY(i)); r *= s[0]; g *= s[1]; bl *= s[2]; }
+        if (base.m.map && uv && !textured) { const s = sample(base.m.map, uv.getX(i), uv.getY(i)); r *= s[0]; g *= s[1]; bl *= s[2]; }
         if (col && base.m.vertexColors) { r *= col.getX(i); g *= col.getY(i); bl *= col.getZ(i); }
         C.push(Math.min(1, r + base.er), Math.min(1, g + base.eg), Math.min(1, bl + base.eb));
-      }
-    }
-    // модели со Sketchfab: текстура фотографическая, по вершинам даёт рябь —
-    // берём средний цвет треугольника (вершины, середины сторон и центр)
-    if (base && base.m.map && uv && o.userData.triAvg) {
-      const c0 = C.length - pt.count * 3;
-      for (let k = 0; k + 2 < pt.count; k += 3) {
-        const ii = [0, 1, 2].map((q) => idx ? idx[pt.start + k + q] : pt.start + k + q);
-        const U = ii.map((i) => uv.getX(i)), V = ii.map((i) => uv.getY(i));
-        const W = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [.5, .5, 0], [0, .5, .5], [.5, 0, .5], [1 / 3, 1 / 3, 1 / 3]];
-        let r = 0, g = 0, bl = 0;
-        for (const w of W) { const s = sample(base.m.map, w[0] * U[0] + w[1] * U[1] + w[2] * U[2], w[0] * V[0] + w[1] * V[1] + w[2] * V[2]); r += s[0]; g += s[1]; bl += s[2]; }
-        r = r / W.length * base.r; g = g / W.length * base.g; bl = bl / W.length * base.b;
-        for (let q = 0; q < 3; q++) { const j = c0 + (k + q) * 3; C[j] = Math.min(1, r + base.er); C[j + 1] = Math.min(1, g + base.eg); C[j + 2] = Math.min(1, bl + base.eb); }
       }
     }
     // нормали: плоские по треугольнику (модели низкополигональные, так выглядят чище)
@@ -89,8 +88,34 @@ function bakeFrame(root, withColor) {
       for (let q = 0; q < 3; q++) { P.push(tri[t + q * 3], tri[t + q * 3 + 1], tri[t + q * 3 + 2]); N.push(-nrm.x, -nrm.y, -nrm.z); }
     }
   }
-  return { P, N, C };
+  return { P, N, C, UV, TX };
 }
+
+// атлас текстур модели: 1024×1024, сетка g×g; uv переносятся в свою клетку (с полями от просачивания)
+const ATLAS = 1024;
+function buildAtlas(UV, TX) {
+  const texs = [...new Set(TX.filter((t) => t))];
+  if (!texs.length) return null;
+  const g = Math.ceil(Math.sqrt(texs.length)), cs = ATLAS / g, m = 6;
+  const cv = document.createElement('canvas'); cv.width = cv.height = ATLAS;
+  const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, ATLAS, ATLAS);
+  texs.forEach((t, k) => {
+    const x = (k % g) * cs, y = Math.floor(k / g) * cs;
+    cx.drawImage(t.image, x, y, cs, cs);
+  });
+  const out = new Float32Array(UV.length);
+  for (let tri = 0; tri < TX.length; tri++) {
+    const t = TX[tri];
+    for (let q = 0; q < 3; q++) {
+      const j = (tri * 3 + q) * 2;
+      if (!t) { out[j] = -1; out[j + 1] = -1; continue; }
+      const k = texs.indexOf(t), x = (k % g) * cs, y = Math.floor(k / g) * cs;
+      out[j] = (x + m + UV[j] * (cs - 2 * m)) / ATLAS; out[j + 1] = (y + m + UV[j + 1] * (cs - 2 * m)) / ATLAS;
+    }
+  }
+  return { uv: out, url: cv.toDataURL('image/jpeg', 0.86) };
+}
+function enc16uv(arr) { const o = new Int16Array(arr.length); for (let i = 0; i < arr.length; i++) o[i] = arr[i] < 0 ? -32767 : Math.round(arr[i] * 32767); return o; }
 
 function enc16(arr) { const o = new Int16Array(arr.length); for (let i = 0; i < arr.length; i++) o[i] = Math.max(-32767, Math.min(32767, Math.round(arr[i] * BAKE_Q))); return o; }
 function enc8n(arr) { const o = new Int8Array(arr.length); for (let i = 0; i < arr.length; i++) o[i] = Math.round(arr[i] * 127); return o; }
@@ -101,11 +126,11 @@ function enc8c(arr) { const o = new Uint8Array(arr.length); for (let i = 0; i < 
 // позициями во всех кадрах и одинаковыми цветами объединяются (индексированная сетка).
 function bakeModel(makeFor, teams, frames) {
   const cols = [], P = [];
-  let n = -1;
+  let n = -1, atlas = null, UVq = null;
   for (let t = 0; t < teams; t++) {
     const f0 = bakeFrame(makeFor(t, 0), true);
     cols.push(enc8c(f0.C));
-    if (t === 0) { n = f0.P.length / 3; P.push(enc16(f0.P)); }
+    if (t === 0) { n = f0.P.length / 3; P.push(enc16(f0.P)); atlas = buildAtlas(f0.UV, f0.TX); if (atlas) UVq = enc16uv(atlas.uv); }
     else if (f0.P.length / 3 !== n) throw new Error('team topology differs');
   }
   for (let f = 1; f < frames; f++) {
@@ -118,6 +143,7 @@ function bakeModel(makeFor, teams, frames) {
     let key = '';
     for (const pf of P) key += pf[i * 3] + ',' + pf[i * 3 + 1] + ',' + pf[i * 3 + 2] + ';';
     for (const c of cols) key += c[i * 3] + ',' + c[i * 3 + 1] + ',' + c[i * 3 + 2] + ';';
+    if (UVq) key += UVq[i * 2] + ',' + UVq[i * 2 + 1];
     let k = map.get(key);
     if (k === undefined) { k = u++; map.set(key, k); uniq.push(i); }
     remap[i] = k;
@@ -125,7 +151,8 @@ function bakeModel(makeFor, teams, frames) {
   if (u > 65535) throw new Error('too many verts ' + u);
   const idx = new Uint16Array(n); for (let i = 0; i < n; i++) idx[i] = remap[i];
   const pick = (src, comp, Ctor) => { const o = new Ctor(u * comp); uniq.forEach((i, k) => { for (let c = 0; c < comp; c++) o[k * comp + c] = src[i * comp + c]; }); return o; };
-  return { n: u, tris: n / 3, idx, colors: cols.map((c) => pick(c, 3, Uint8Array)), pos: P.map((p) => pick(p, 3, Int16Array)) };
+  return { n: u, tris: n / 3, idx, colors: cols.map((c) => pick(c, 3, Uint8Array)), pos: P.map((p) => pick(p, 3, Int16Array)),
+    uv: UVq ? pick(UVq, 2, Int16Array) : null, tex: atlas ? atlas.url : null };
 }
 
 const BAKE_FRAMES = [{ kind: 'idle' }, ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ kind: 'walk', i: i / 2, ph: i * Math.PI / 4 })), ...[0, 1, 2].map((i) => ({ kind: 'act', i })), { kind: 'dead' }];
@@ -154,13 +181,14 @@ window.bakeAll = async function () {
   out.wall_seg = bakeModel((team) => kkWallSeg(team), 2, 1);
   DECO.forEach((f, k) => { out['deco' + k] = bakeModel(() => f(), 1, 1); });
   // упаковка: JSON-оглавление + один двоичный блок
-  const index = {}, chunks = []; let off = 0;
+  const index = {}, chunks = [], texOut = {}; let off = 0;
   const push = (ta) => { const pad = (4 - (off % 4)) % 4; if (pad) { chunks.push(new Uint8Array(pad)); off += pad; } const u8 = new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength); chunks.push(u8); const o = off; off += u8.byteLength; return o; };
   for (const name in out) {
     const m = out[name];
     index[name] = { n: m.n, tris: m.tris, frames: m.pos.length, idx: push(m.idx), colors: m.colors.map(push), pos: m.pos.map(push) };
+    if (m.uv) { index[name].uv = push(m.uv); index[name].tex = 'tex_' + name + '.jpg'; texOut[index[name].tex] = m.tex; }
   }
   const all = new Uint8Array(off); let p = 0; for (const c of chunks) { all.set(c, p); p += c.byteLength; }
   let s = ''; for (let i = 0; i < all.length; i += 0x8000) s += String.fromCharCode.apply(null, all.subarray(i, i + 0x8000));
-  return { index: { q: BAKE_Q, frames: BAKE_FRAMES.map((f) => f.kind), models: index }, bin: btoa(s), ms: Date.now() - t0 };
+  return { index: { q: BAKE_Q, frames: BAKE_FRAMES.map((f) => f.kind), models: index }, bin: btoa(s), tex: texOut, ms: Date.now() - t0 };
 };

@@ -9,6 +9,8 @@ const { chromium } = require('playwright'); const fs = require('fs'); const path
   if (r.err) { console.log(r.err); process.exit(1); }
   fs.writeFileSync(path.join(out, 'models.json'), JSON.stringify(r.index));
   fs.writeFileSync(path.join(out, 'models.bin'), Buffer.from(r.bin, 'base64'));
+  for (const f of fs.readdirSync(out)) if (/^tex_.*\.jpg$/.test(f)) fs.unlinkSync(path.join(out, f));
+  for (const k in r.tex) fs.writeFileSync(path.join(out, k), Buffer.from(r.tex[k].split(',')[1], 'base64'));
   for (const k in r.index.models) console.log(k, r.index.models[k].n, 'verts', r.index.models[k].tris, 'tris x', r.index.models[k].frames);
   console.log('ms', r.ms, 'bin', fs.statSync(path.join(out, 'models.bin')).size);
   await b.close();
