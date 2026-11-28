@@ -159,17 +159,17 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             val h = hash2(tx, ty, 77)
             if (t == T_GRASS) {
                 val nearForest = (0 until 4).any { ter(tx + DX4[it], ty + DY4[it]) == T_FOREST }
-                val meadow = fbm(tx / 6.0, ty / 6.0, G.seed + 5) > 0.56
-                if (nearForest && h < 0.3) put(Models3D.D_BUSH + (if (hash2(tx, ty, 78) < 0.4) 1 else 0), tx, ty, 80, 1.0)
-                else if (meadow && h < 0.35) put(Models3D.D_FLOWER + (hash2(tx, ty, 79) * 4).toInt().coerceIn(0, 3), tx, ty, 90, 1.0)
-                else if (h < 0.025) put(Models3D.D_PEBBLE + (if (hash2(tx, ty, 81) < 0.5) 1 else 0), tx, ty, 100, 1.0)
-                else if (h < 0.05) put(Models3D.D_BUSH, tx, ty, 110, 0.8)
-                if (hash2(tx, ty, 82) < 0.4) put(Models3D.D_TUFT + (hash2(tx, ty, 83) * 3).toInt().coerceIn(0, 2), tx, ty, 120, 1.0)
+                val meadow = fbm(tx / 6.0, ty / 6.0, G.seed + 5) > 0.5
+                if (nearForest && h < 0.3) put(Models3D.D_BUSH + (if (hash2(tx, ty, 78) < 0.4) 1 else 0), tx, ty, 80, 1.6)
+                else if (meadow && h < 0.5) put(Models3D.D_FLOWER + (hash2(tx, ty, 79) * 4).toInt().coerceIn(0, 3), tx, ty, 90, 1.9)
+                else if (h < 0.03) put(Models3D.D_PEBBLE + (if (hash2(tx, ty, 81) < 0.5) 1 else 0), tx, ty, 100, 1.4)
+                else if (h < 0.07) put(Models3D.D_BUSH + (if (hash2(tx, ty, 85) < 0.3) 1 else 0), tx, ty, 110, 1.3)
+                if (hash2(tx, ty, 82) < 0.6) put(Models3D.D_TUFT + (hash2(tx, ty, 83) * 3).toInt().coerceIn(0, 2), tx, ty, 120, 2.0)
             } else if (t == T_SAND) {
-                if (h < 0.08) put(Models3D.D_PEBBLE + (if (hash2(tx, ty, 81) < 0.5) 1 else 0), tx, ty, 100, 0.9)
+                if (h < 0.1) put(Models3D.D_PEBBLE + (if (hash2(tx, ty, 81) < 0.5) 1 else 0), tx, ty, 100, 1.3)
             } else if (t == T_WATER) {
                 val shore = (0 until 4).any { val q = ter(tx + DX4[it], ty + DY4[it]); q == T_GRASS || q == T_SAND || q == T_FOREST }
-                if (shore && h < 0.14) put(Models3D.D_LILY + (if (hash2(tx, ty, 84) < 0.5) 1 else 0), tx, ty, 130, 1.0)
+                if (shore && h < 0.18) put(Models3D.D_LILY + (if (hash2(tx, ty, 84) < 0.5) 1 else 0), tx, ty, 130, 1.4)
             }
         }
         return TreeSet(d.toFloatArray(), kinds.toIntArray(), dd.toFloatArray(), dk.toIntArray()).also { trees[key] = it }

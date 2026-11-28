@@ -50,7 +50,7 @@ function bigNature(name, w) { const o = fitModel(KK.med[name], w, w, 1); return 
 // земля за краем карты: плоская плита тёмной травы
 function edgeGround() {
   const g = new THREE.Group();
-  const p = box(64, 2, 64, mat(0x4f7a34, { roughness: 1 }), 0, -1.2, 0); p.receiveShadow = true; g.add(p);
+  const p = box(64, 2, 64, mat(0x6a9a40, { roughness: 1 }), 0, -1.2, 0); p.receiveShadow = true; g.add(p);
   return g;
 }
 // таблица убранства: номер = индекс (важен порядок, как в Models3D.DECO)
