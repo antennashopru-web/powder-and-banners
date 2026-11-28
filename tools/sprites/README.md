@@ -8,6 +8,7 @@
 cd tools/sprites
 npm install
 ./fetch-kaykit.sh                     # скачать модели KayKit в kk/
+SKETCHFAB_TOKEN=... python3 fetch-sketchfab.py   # модели CC BY со Sketchfab в skf/ (см. SKETCHFAB.md)
 python3 -m http.server 8765 &         # модули three.js грузятся по http
 node kkrun.js out                     # рендер атласов PNG в out/
 cp out/*.png out/sprites.json ../../app/src/main/assets/sprites/   # для Android

@@ -67,6 +67,20 @@ function bakeFrame(root, withColor) {
         C.push(Math.min(1, r + base.er), Math.min(1, g + base.eg), Math.min(1, bl + base.eb));
       }
     }
+    // модели со Sketchfab: текстура фотографическая, по вершинам даёт рябь —
+    // берём средний цвет треугольника (вершины, середины сторон и центр)
+    if (base && base.m.map && uv && o.userData.triAvg) {
+      const c0 = C.length - pt.count * 3;
+      for (let k = 0; k + 2 < pt.count; k += 3) {
+        const ii = [0, 1, 2].map((q) => idx ? idx[pt.start + k + q] : pt.start + k + q);
+        const U = ii.map((i) => uv.getX(i)), V = ii.map((i) => uv.getY(i));
+        const W = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [.5, .5, 0], [0, .5, .5], [.5, 0, .5], [1 / 3, 1 / 3, 1 / 3]];
+        let r = 0, g = 0, bl = 0;
+        for (const w of W) { const s = sample(base.m.map, w[0] * U[0] + w[1] * U[1] + w[2] * U[2], w[0] * V[0] + w[1] * V[1] + w[2] * V[2]); r += s[0]; g += s[1]; bl += s[2]; }
+        r = r / W.length * base.r; g = g / W.length * base.g; bl = bl / W.length * base.b;
+        for (let q = 0; q < 3; q++) { const j = c0 + (k + q) * 3; C[j] = Math.min(1, r + base.er); C[j + 1] = Math.min(1, g + base.eg); C[j + 2] = Math.min(1, bl + base.eb); }
+      }
+    }
     // нормали: плоские по треугольнику (модели низкополигональные, так выглядят чище)
     for (let t = 0; t + 8 < tri.length; t += 9) {
       a.set(tri[t], tri[t + 1], tri[t + 2]); b.set(tri[t + 3], tri[t + 4], tri[t + 5]); c.set(tri[t + 6], tri[t + 7], tri[t + 8]);

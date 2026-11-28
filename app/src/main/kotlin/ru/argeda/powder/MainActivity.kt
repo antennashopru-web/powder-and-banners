@@ -527,7 +527,10 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "<b>Драконы:</b> стройте логово дракона. Драконы летают над лесом и водой и жгут огнём всё вокруг цели. Пикинёры, рейтары и пушки до них не достают: сбивают их мушкетёры, башни и ратуша.",
         )
         for (p in ps) help.addView(tv(html(p), 13.5f).apply { setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0) })
-        help.addView(tv(html("<b>Графика:</b> 3D-модели персонажей и зданий — KayKit (Kay Lousberg, www.kaylousberg.com), лицензия CC0. Пики, мушкеты, кони и пушки — свои."), 12f).apply {
+        help.addView(tv(html("<b>Графика:</b> 3D-модели персонажей и зданий — KayKit (Kay Lousberg, www.kaylousberg.com), лицензия CC0. Пики, мушкеты и мундиры — свои." +
+            "<br><b>Модели со Sketchfab (лицензия CC BY 4.0):</b> пушка — «Medieval Mortar», José Luis Ruiz; мортира — «Cannon Low-Poly», derdaryen; " +
+            "конь — «Low-Poly Horse», antemeossa; дом — «Medieval House Low Poly», SantyFrow; башня — «Medieval Tower», Den (dfomenco); " +
+            "мельница — «Windmill Low Poly», Aegis_Wolf. Модели уменьшены, перекрашены и запечены для игры."), 12f).apply {
             alpha = 0.75f; setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0)
         })
         c.addView(help, LinearLayout.LayoutParams(MP, WC))
