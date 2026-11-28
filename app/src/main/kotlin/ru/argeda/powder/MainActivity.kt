@@ -291,7 +291,21 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                     for (k in 0 until 6) g.spawnUnit(U_PIKE, 1, h.x + 200 + (k % 3) * 16, h.y - 40 + (k / 3) * 16).let { u -> u.cmd = CMD_AMOVE; u.hasAmove = true; u.amX = h.x; u.amY = h.y; g.walkTeam = 1; g.goalPt(u, h.x, h.y, 10.0); g.walkTeam = -1 }
                     g.computePop()
                 }
-                if (it.hasExtra("zoom")) { g.camZ = it.getFloatExtra("zoom", 1f).toDouble().coerceIn(0.45, 2.0); g.clampCam() }
+                if (it.getBooleanExtra("troops", false)) {
+                    // для проверки: гренадеры, драгуны и мортиры против вражеской стены и пикинёров
+                    val h = g.blds.first { b -> b.team == 0 && b.type == B_HALL }
+                    var wall: Bld? = null
+                    for (j in h.ty - 3..h.ty + 3) if (g.canPlace(B_WALL, h.tx + 9, j, 1)) g.placeBuilding(B_WALL, 1, h.tx + 9, j, true).let { b -> if (j == h.ty) wall = b }
+                    val bx = h.x + 70; val by = h.y
+                    for (k in 0 until 4) g.spawnUnit(U_GREN, 0, bx + 40, by - 36 + k * 18)
+                    for (k in 0 until 3) g.spawnUnit(U_DRAGOON, 0, bx + 10, by - 60 + k * 24 + (if (k > 0) 60 else 0))
+                    for (k in 0 until 2) g.spawnUnit(U_MORTAR, 0, bx - 20, by - 30 + k * 60).let { u -> wall?.let { w -> u.target = w } }
+                    for (k in 0 until 6) g.spawnUnit(U_PIKE, 1, bx + 150 + (k % 2) * 16, by - 40 + (k / 2) * 18).let { u -> u.cmd = CMD_AMOVE; u.hasAmove = true; u.amX = h.x; u.amY = h.y; g.walkTeam = 1; g.goalPt(u, h.x, h.y, 10.0); g.walkTeam = -1 }
+                    g.computePop()
+                    if (it.hasExtra("zoom")) g.camZ = it.getFloatExtra("zoom", 1f).toDouble().coerceIn(0.45, 2.0)
+                    g.centerCam(bx + 50, by)
+                }
+                if (it.hasExtra("zoom") && !it.getBooleanExtra("troops", false)) { g.camZ = it.getFloatExtra("zoom", 1f).toDouble().coerceIn(0.45, 2.0); g.clampCam() }
             }
         } else startDemo()
     }
@@ -504,6 +518,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "<b>Сохранение:</b> в паузе есть «Сохранить игру», а при сворачивании игра сохраняется сама. Продолжить можно из главного меню.",
             "<b>Войска:</b> пикинёры держат конницу, мушкетёры бьют залпом издалека, рейтары быстры, пушки рушат здания и строи.",
             "<b>Улучшения:</b> Арсенал изучает закалённые клинки, кирасы и зернистый порох, Академия учит артиллеристов, каменщиков и строевой выучке. Улучшение действует на все ваши войска сразу, у многих две ступени.",
+            "<b>Новые войска:</b> в Казарме — гренадеры, их гранаты рвутся и задевают всех рядом. В Конюшне — драгуны, конные стрелки. В Литейной — мортиры: бьют навесом очень далеко и ломают стены, но вблизи беззащитны.",
             "<b>Стены и ворота:</b> выберите «Стена» и проведите пальцем по земле: стена тянется по прямой, по 10 камня за кусок. Ворота пропускают только своих, их можно поставить прямо на стену. Враг стену не обходит, а проламывает, пушки делают это быстрее всех.",
             "<b>Драконы:</b> стройте логово дракона. Драконы летают над лесом и водой и жгут огнём всё вокруг цели. Пикинёры, рейтары и пушки до них не достают: сбивают их мушкетёры, башни и ратуша.",
         )
@@ -868,7 +883,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 for (t in d.research) {
                     val next = g.techNext(0, t)
                     val done = next >= TECH[t].levels
-                    actBtn(techIcon(t), TECH[t].name + if (TECH[t].levels > 1 && !done) " ${next + 1}" else "", if (done) IntArray(4) else g.techCost(0, t), 0) {
+                    actBtn(techIcon(t), TECH[t].short + if (TECH[t].levels > 1 && !done) " ${next + 1}" else "", if (done) IntArray(4) else g.techCost(0, t), 0) {
                         if (done) toast(TECH[t].name + ": изучено полностью")
                         else if (!g.enqueueTech(b, t)) toast(if (b.queue.size >= 6) "Очередь заполнена" else "Не хватает: " + g.missing(g.techCost(0, t)))
                         else { sfx(S_CLICK, Double.NaN, Double.NaN); toast(TECH[t].desc) }
@@ -910,7 +925,8 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
     private var demolishT = 0L
 
     private fun plural(t: Int) = when (t) {
-        U_PEASANT -> "крестьяне"; U_PIKE -> "пикинёры"; U_MUSKET -> "мушкетёры"; U_CAV -> "рейтары"; U_DRAGON -> "драконы"; else -> "пушки"
+        U_PEASANT -> "крестьяне"; U_PIKE -> "пикинёры"; U_MUSKET -> "мушкетёры"; U_CAV -> "рейтары"; U_DRAGON -> "драконы"
+        U_GREN -> "гренадеры"; U_DRAGOON -> "драгуны"; U_MORTAR -> "мортиры"; else -> "пушки"
     }
 
     private fun tradeBtn(label: String, ok: Boolean, f: () -> Unit) {

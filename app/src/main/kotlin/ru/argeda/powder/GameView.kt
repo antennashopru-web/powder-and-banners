@@ -260,10 +260,10 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         if (e.working) { val k = floor(e.anim * 5).toInt() % 4; return 5 + (if (k == 3) 1 else k) }
         if (e.aimT > 0) {
             if (e.hitT > 0) return if (e.hitT > 0.17) 5 else if (e.hitT > 0.08) 6 else 7
-            if (e.type == U_MUSKET || e.type == U_CANNON) return if (UNIT[e.type].cd - e.cd < 0.25) 6 else 5
+            if (isGun(e.type)) return if (UNIT[e.type].cd - e.cd < 0.25) 6 else 5
             return 5
         }
-        if (e.moving || UNIT[e.type].fly) return 1 + (floor(e.anim * (if (e.type == U_CAV) 9 else if (e.type == U_DRAGON) 5 else 7)).toInt() and 3)
+        if (e.moving || UNIT[e.type].fly) return 1 + (floor(e.anim * (if (e.type == U_CAV || e.type == U_DRAGOON) 9 else if (e.type == U_DRAGON) 5 else 7)).toInt() and 3)
         return 0
     }
 
@@ -404,7 +404,7 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
             val x: Float
             val y: Float
             if (e is Bld) { w = e.w * TILE * 0.7f; x = e.x.toFloat() - w / 2; y = e.ty * TILE - 12f }
-            else { val u = e as Unt; w = if (u.type == U_DRAGON) 26f else 16f; x = u.x.toFloat() - w / 2; y = u.y.toFloat() - (if (u.type == U_CAV) 38 else if (u.type == U_CANNON) 24 else if (u.type == U_DRAGON) 86 else 30) }
+            else { val u = e as Unt; w = if (u.type == U_DRAGON) 26f else 16f; x = u.x.toFloat() - w / 2; y = u.y.toFloat() - (if (u.type == U_CAV || u.type == U_DRAGOON) 38 else if (u.type == U_CANNON || u.type == U_MORTAR) 24 else if (u.type == U_DRAGON) 86 else 30) }
             val bh = if (e is Bld) 3.5f else 2.5f
             pf.color = rgba(20, 12, 6, .78); rf.set(x - 1.2f, y - 1.2f, x + w + 1.2f, y + bh + 1.2f); c.drawRoundRect(rf, 1.6f, 1.6f, pf)
             val f = clamp(e.hp / e.maxhp, 0.0, 1.0).toFloat()
@@ -417,9 +417,10 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
         for (p in G.proj) {
             val k = min(1.0, p.t / p.dur)
             val L = hyp(p.tx - p.sx, p.ty - p.sy)
-            val hgt = (sin(k * PI) * L * 0.18).toFloat()
-            pf.color = rgba(0, 0, 0, .25); oval(c, p.x.toFloat(), p.y.toFloat(), 3f, 1.5f, pf)
-            pf.color = 0xff1a1a1a.toInt(); c.drawCircle(p.x.toFloat(), p.y.toFloat() - hgt, 3f, pf)
+            val hgt = (sin(k * PI) * L * projArc(p.src)).toFloat()
+            val sz = projSize(p.src)
+            pf.color = rgba(0, 0, 0, .25); oval(c, p.x.toFloat(), p.y.toFloat(), sz, sz / 2, pf)
+            pf.color = 0xff1a1a1a.toInt(); c.drawCircle(p.x.toFloat(), p.y.toFloat() - hgt, sz, pf)
         }
         // эффекты
         for (f in G.fx) {

@@ -264,7 +264,7 @@ function renderSet(makers, big, ax, ay) {
 function kkUnitAtlas(type, build) {
   const makers = [];
   for (let team = 0; team < 2; team++) for (let d = 0; d < 8; d++) FRAMES.forEach((fr) => makers.push(() => {
-    if (fr.kind === 'dead' && type === 'cav') {
+    if (fr.kind === 'dead' && (type === 'cav' || type === 'dragoon')) {
       const rotY = -d * Math.PI / 4, side = (d >= 2 && d <= 5) ? 1 : -1;
       const w = new THREE.Group(), inner = new THREE.Group(); inner.add(build(team, { kind: 'idle' })); w.add(inner);
       w.rotation.z = side * Math.PI / 2 * 0.95; w.position.set(side * 8, 4, 0); inner.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
@@ -285,9 +285,9 @@ function kkUnitAtlas(type, build) {
     let fw = Math.min(R.w - fx, bx[2] + 2 - R.x0 - fx), fh = Math.min(R.h - fy, bx[3] + 2 - R.y0 - fy);
     fw += fw & 1; fh += fh & 1; fw = Math.min(fw, R.w - fx); fh = Math.min(fh, R.h - fy);
     fr.push(fx, fy, fw, fh);
-    if (type === 'cannon' && f === 8) { ag.save(); ag.globalAlpha = 0.85; ag.filter = 'brightness(0.55) sepia(0.4)'; }
+    if ((type === 'cannon' || type === 'mortar') && f === 8) { ag.save(); ag.globalAlpha = 0.85; ag.filter = 'brightness(0.55) sepia(0.4)'; }
     ag.drawImage(c, R.x0, R.y0, R.w, R.h, f * R.w, row * R.h, R.w, R.h);
-    if (type === 'cannon' && f === 8) ag.restore();
+    if ((type === 'cannon' || type === 'mortar') && f === 8) ag.restore();
   });
   return { url: atlas.toDataURL('image/png'), meta: { cw: R.w / S, ch: R.h / S, ax: R.ax / S, ay: R.ay / S, cols, scale: S, fr } };
 }
@@ -316,7 +316,7 @@ function kkNature() {
 window.kkRenderAll = async function (only) {
   await kkLoad();
   const res = { units: {}, blds: {} };
-  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon };
+  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon, grenadier: kkGrenadier, dragoon: kkDragoon, mortar: kkMortar };
   for (const t in U) if (!only || only.includes(t)) res.units[t] = kkUnitAtlas(t, U[t]);
   if (!only || only.includes('blds')) { res.blds = kkBuildingAtlas(); if (typeof kkWallParts === 'function') res.wallparts = kkWallParts(); }
   if (!only || only.includes('nature')) Object.assign(res, kkNature());

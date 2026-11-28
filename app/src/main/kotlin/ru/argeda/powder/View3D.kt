@@ -320,11 +320,11 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
                 fa = Models3D.F_ACT + (if (k == 3) 1 else k); fb = fa
             } else if (u.aimT > 0) {
                 fa = if (u.hitT > 0) Models3D.F_ACT + (if (u.hitT > 0.17) 0 else if (u.hitT > 0.08) 1 else 2)
-                else if ((u.type == U_MUSKET || u.type == U_CANNON) && UNIT[u.type].cd - u.cd < 0.25) Models3D.F_ACT + 1
+                else if (isGun(u.type) && UNIT[u.type].cd - u.cd < 0.25) Models3D.F_ACT + 1
                 else Models3D.F_ACT
                 fb = fa
             } else if (u.moving) {
-                val ph = u.anim * (if (u.type == U_CAV) 18 else 14)
+                val ph = u.anim * (if (u.type == U_CAV || u.type == U_DRAGOON) 18 else 14)
                 val i = floor(ph).toInt()
                 fa = Models3D.F_WALK + Math.floorMod(i, 8); fb = Models3D.F_WALK + Math.floorMod(i + 1, 8); mix = (ph - i).toFloat()
             } else { fa = Models3D.F_IDLE; fb = fa }
@@ -616,8 +616,8 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             for (p in G.proj) {
                 val k = min(1.0, p.t / p.dur)
                 val L = hyp(p.tx - p.sx, p.ty - p.sy)
-                if (!cam.project(p.x, 8 + sin(k * PI) * L * 0.25, p.y, q)) continue
-                pf.color = 0xff1a1a1a.toInt(); c.drawCircle(q[0], q[1], 3f * q[2], pf)
+                if (!cam.project(p.x, 8 + sin(k * PI) * L * projArc(p.src) * 1.4, p.y, q)) continue
+                pf.color = 0xff1a1a1a.toInt(); c.drawCircle(q[0], q[1], projSize(p.src) * q[2], pf)
             }
             // дым, вспышки, пыль, искры
             for (fx in G.fx) {

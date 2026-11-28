@@ -51,6 +51,14 @@ const val U_MUSKET = 2
 const val U_CAV = 3
 const val U_CANNON = 4
 const val U_DRAGON = 5
+const val U_GREN = 6
+const val U_DRAGOON = 7
+const val U_MORTAR = 8
+/** стреляет из ружья или орудия: кадр выстрела по перезарядке */
+/** высота дуги снаряда (доля дальности) и его размер: мортира бьёт навесом, граната мелкая */
+fun projArc(src: Ent?) = when ((src as? Unt)?.type) { U_MORTAR -> 0.6; U_GREN -> 0.35; else -> 0.18 }
+fun projSize(src: Ent?) = if ((src as? Unt)?.type == U_GREN) 2f else 3f
+fun isGun(type: Int) = type == U_MUSKET || type == U_CANNON || type == U_DRAGOON || type == U_MORTAR
 
 val UNIT = arrayOf(
     UDef("peasant", "Крестьянин", 45, 3.0, 14.0, 1.2, 54.0, 6, cost(food = 50), 8.0, 1, 6.0, "Добывает ресурсы и строит"),
@@ -60,9 +68,15 @@ val UNIT = arrayOf(
     UDef("cannon", "Пушка", 150, 70.0, 340.0, 7.0, 26.0, 9, cost(wood = 150, stone = 80, gold = 120), 20.0, 3, 9.0, "Рушит здания и плотные строи", ranged = true, splash = 46.0, vsBld = 3.0),
     UDef("dragon", "Дракон", 600, 26.0, 70.0, 2.4, 72.0, 9, cost(food = 250, stone = 50, gold = 160), 30.0, 4, 13.0,
         "Летит над лесом и водой, жжёт огнём. Сбить можно только стрельбой", ranged = true, splash = 36.0, vsBld = 1.8, fly = true),
+    UDef("grenadier", "Гренадер", 95, 20.0, 100.0, 3.6, 44.0, 7, cost(food = 60, wood = 20, gold = 30), 12.0, 1, 6.0,
+        "Бросает гранаты: бьёт по толпе и по зданиям", ranged = true, splash = 30.0, vsBld = 1.6),
+    UDef("dragoon", "Драгун", 150, 24.0, 150.0, 3.4, 84.0, 8, cost(food = 80, wood = 10, gold = 60), 15.0, 2, 9.0,
+        "Конный стрелок: быстро налетает и стреляет. Боится пик", ranged = true, cav = true),
+    UDef("mortar", "Мортира", 120, 55.0, 420.0, 9.0, 22.0, 9, cost(wood = 180, stone = 100, gold = 120), 24.0, 3, 9.0,
+        "Навесной огонь издалека: рушит стены и здания, вблизи беззащитна", ranged = true, splash = 50.0, vsBld = 3.5),
 )
 // pike 0, musket 1, cav 2, cannon 3, peasant 4
-val FORM_ORDER = intArrayOf(4, 0, 1, 2, 3, 5)
+val FORM_ORDER = intArrayOf(4, 0, 1, 2, 3, 5, 1, 2, 3)
 
 class BDef(
     val key: String, val name: String, val w: Int, val h: Int, val hp: Int, val cost: IntArray, val time: Double,
@@ -91,9 +105,9 @@ val BLD = arrayOf(
     BDef("house", "Дом", 2, 2, 500, cost(wood = 60), 15.0, 4, "+10 к населению", pop = 10),
     BDef("farm", "Ферма", 3, 3, 400, cost(wood = 80), 18.0, 4, "Даёт еду, до 6 крестьян", farm = true),
     BDef("store", "Рынок", 2, 2, 600, cost(wood = 100), 18.0, 5, "Торговля ресурсами; сюда сдают добычу", drop = true),
-    BDef("barracks", "Казарма", 3, 3, 1300, cost(wood = 150, stone = 50), 35.0, 6, "Пикинёры и мушкетёры", trains = intArrayOf(U_PIKE, U_MUSKET)),
-    BDef("stable", "Конюшня", 3, 3, 1200, cost(wood = 200, stone = 50, gold = 50), 40.0, 6, "Рейтары", trains = intArrayOf(U_CAV)),
-    BDef("foundry", "Литейня", 3, 3, 1400, cost(wood = 200, stone = 150, gold = 100), 50.0, 6, "Пушки", trains = intArrayOf(U_CANNON)),
+    BDef("barracks", "Казарма", 3, 3, 1300, cost(wood = 150, stone = 50), 35.0, 6, "Пикинёры, мушкетёры и гренадеры", trains = intArrayOf(U_PIKE, U_MUSKET, U_GREN)),
+    BDef("stable", "Конюшня", 3, 3, 1200, cost(wood = 200, stone = 50, gold = 50), 40.0, 6, "Рейтары и драгуны", trains = intArrayOf(U_CAV, U_DRAGOON)),
+    BDef("foundry", "Литейня", 3, 3, 1400, cost(wood = 200, stone = 150, gold = 100), 50.0, 6, "Пушки и мортиры", trains = intArrayOf(U_CANNON, U_MORTAR)),
     BDef("tower", "Башня", 2, 2, 1000, cost(wood = 50, stone = 150), 30.0, 9, "Стреляет по врагам", atk = 15.0, range = 230.0, cd = 1.8),
     BDef("lair", "Логово дракона", 3, 3, 1600, cost(wood = 250, stone = 250), 55.0, 7, "Драконы: летают и жгут огнём", trains = intArrayOf(U_DRAGON)),
     BDef("wall", "Стена", 1, 1, 600, cost(stone = 10), 5.0, 2, "Враг не пройдёт, пока не проломит. Проведите пальцем, чтобы протянуть стену"),
@@ -103,7 +117,7 @@ val BLD = arrayOf(
 )
 
 /** улучшение: цена и время растут со ступенью (ступень 2 стоит вдвое дороже) */
-class TDef(val key: String, val name: String, val desc: String, val levels: Int, val cost: IntArray, val time: Double, val icon: String)
+class TDef(val key: String, val name: String, val short: String, val desc: String, val levels: Int, val cost: IntArray, val time: Double, val icon: String)
 
 const val T_BLADES = 0
 const val T_ARMOR = 1
@@ -113,12 +127,12 @@ const val T_MASON = 4
 const val T_DRILL = 5
 
 val TECH = arrayOf(
-    TDef("blades", "Закалённые клинки", "Пикинёры, рейтары и крестьяне бьют сильнее: +15% за ступень", 2, cost(wood = 80, gold = 80), 35.0, "⚔️"),
-    TDef("armor", "Кирасы", "Войска на земле получают меньше урона: −12% за ступень", 2, cost(food = 100, gold = 100), 40.0, "🛡️"),
-    TDef("powder", "Зернистый порох", "Мушкетёры, башни и ратуша стреляют сильнее: +15% за ступень", 2, cost(wood = 60, gold = 120), 40.0, "💥"),
-    TDef("arty", "Артиллерийская школа", "Пушки бьют сильнее и дальше: +20% урона и +12% дальности за ступень", 2, cost(wood = 120, stone = 60, gold = 120), 45.0, "🎯"),
-    TDef("mason", "Каменщики", "Здания и стены прочнее на треть", 1, cost(wood = 100, stone = 200), 45.0, "🧱"),
-    TDef("drill", "Строевая выучка", "Войска ходят быстрее: +10% за ступень", 2, cost(food = 150, gold = 60), 35.0, "🥁"),
+    TDef("blades", "Закалённые клинки", "Клинки", "Пикинёры, рейтары и крестьяне бьют сильнее: +15% за ступень", 2, cost(wood = 80, gold = 80), 35.0, "⚔️"),
+    TDef("armor", "Кирасы", "Кирасы", "Войска на земле получают меньше урона: −12% за ступень", 2, cost(food = 100, gold = 100), 40.0, "🛡️"),
+    TDef("powder", "Зернистый порох", "Порох", "Мушкетёры, башни и ратуша стреляют сильнее: +15% за ступень", 2, cost(wood = 60, gold = 120), 40.0, "💥"),
+    TDef("arty", "Артиллерийская школа", "Артиллерия", "Пушки бьют сильнее и дальше: +20% урона и +12% дальности за ступень", 2, cost(wood = 120, stone = 60, gold = 120), 45.0, "🎯"),
+    TDef("mason", "Каменщики", "Каменщики", "Здания и стены прочнее на треть", 1, cost(wood = 100, stone = 200), 45.0, "🧱"),
+    TDef("drill", "Строевая выучка", "Выучка", "Войска ходят быстрее: +10% за ступень", 2, cost(food = 150, gold = 60), 35.0, "🥁"),
 )
 /** в очереди здания: обучение отряда (номер < Q_TECH) или улучшение (Q_TECH + номер улучшения) */
 const val Q_TECH = 100

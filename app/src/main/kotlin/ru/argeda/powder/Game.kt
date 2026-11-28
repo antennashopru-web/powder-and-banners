@@ -508,13 +508,13 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     fun lvl(team: Int, t: Int) = if (team in 0..1) tech[team][t] else 0
     fun atkBonus(u: Unt): Double = when (u.type) {
         U_PEASANT, U_PIKE, U_CAV -> 1 + 0.15 * lvl(u.team, T_BLADES)
-        U_MUSKET -> 1 + 0.15 * lvl(u.team, T_POWDER)
-        U_CANNON -> 1 + 0.2 * lvl(u.team, T_ARTY)
+        U_MUSKET, U_GREN, U_DRAGOON -> 1 + 0.15 * lvl(u.team, T_POWDER)
+        U_CANNON, U_MORTAR -> 1 + 0.2 * lvl(u.team, T_ARTY)
         else -> 1.0
     }
     fun armorMul(t: Unt): Double = if (t.type == U_PEASANT || UNIT[t.type].fly) 1.0 else 1 - 0.12 * lvl(t.team, T_ARMOR)
     fun spdOf(u: Unt): Double = UNIT[u.type].spd * (if (u.type == U_PEASANT) 1.0 else 1 + 0.1 * lvl(u.team, T_DRILL))
-    fun rangeOf(u: Unt): Double = UNIT[u.type].range * (if (u.type == U_CANNON) 1 + 0.12 * lvl(u.team, T_ARTY) else 1.0)
+    fun rangeOf(u: Unt): Double = UNIT[u.type].range * (if (u.type == U_CANNON || u.type == U_MORTAR) 1 + 0.12 * lvl(u.team, T_ARTY) else 1.0)
     fun hpMul(team: Int): Double = 1 + 0.33 * lvl(team, T_MASON)
     /** ступень, которая будет следующей с учётом уже стоящих в очередях */
     fun techNext(team: Int, t: Int): Int = tech[team][t] + blds.sumOf { b -> if (b.team == team && !b.dead) b.queue.count { it == Q_TECH + t } else 0 }
@@ -540,7 +540,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (team == 0) { host.toast("Изучено: " + TECH[t].name); host.sfx(S_DONE, Double.NaN, Double.NaN) }
     }
 
-    fun canHitAir(u: Unt) = UNIT[u.type].ranged && u.type != U_CANNON
+    fun canHitAir(u: Unt) = UNIT[u.type].ranged && u.type != U_CANNON && u.type != U_MORTAR && u.type != U_GREN
     fun flies(e: Ent?) = e is Unt && UNIT[e.type].fly
 
     fun findEnemyAt(x: Double, y: Double, team: Int, radius: Double, unitsOnly: Boolean, air: Boolean = true): Ent? {
@@ -628,7 +628,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (u.target != null) doCombat(u, dt)
         else if (u.task != null) peasantTask(u, dt)
         else if (u.goal != null && steer(u, dt) && (u.cmd == CMD_MOVE || u.cmd == CMD_AMOVE)) u.cmd = CMD_NONE
-        if (u.moving && !auto && fx.size < 600 && rnd() < (if (u.type == U_CAV) 0.35 else if (u.type == U_CANNON) 0.2 else 0.03)) {
+        if (u.moving && !auto && fx.size < 600 && rnd() < (if (u.type == U_CAV || u.type == U_DRAGOON) 0.35 else if (u.type == U_CANNON || u.type == U_MORTAR) 0.2 else 0.03)) {
             val f = Fx(FX_DUST, u.x - u.face * 6 + (rnd() - 0.5) * 6, u.y - 1, 0.7 + rnd() * 0.4)
             f.vx = -u.face * 6.0; f.vy = -4.0
             f.r = if (u.type == U_PEASANT || u.type == U_PIKE || u.type == U_MUSKET) 1.5 else 2.5
@@ -642,8 +642,9 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (t !is Unt) return 1.0
         var m = 1.0
         if (d.vsCav > 0 && UNIT[t.type].cav) m = d.vsCav
-        if (a.type == U_CAV && (t.type == U_MUSKET || t.type == U_CANNON)) m = 1.4
-        if (a.type == U_PIKE && t.type == U_CANNON) m = 1.5
+        if (a.type == U_CAV && (t.type == U_MUSKET || t.type == U_CANNON || t.type == U_MORTAR || t.type == U_GREN)) m = 1.4
+        if (a.type == U_PIKE && (t.type == U_CANNON || t.type == U_MORTAR)) m = 1.5
+        if (a.type == U_GREN && t is Unt && !UNIT[t.type].cav) m = 1.2
         return m
     }
 
@@ -695,7 +696,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     private fun attack(u: Unt, t: Ent, dist: Double) {
         val d = UNIT[u.type]
         val m = dmgMult(u, t) * atkBonus(u)
-        if (u.type == U_MUSKET) {
+        if (u.type == U_MUSKET || u.type == U_DRAGOON) {
             val mx = u.x + u.face * 12
             val my = u.y - 10
             flash(mx, my, 0.12)
@@ -727,6 +728,21 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
                 if (dd < d.splash) damage(v, d.atk * 0.45 * (1 - dd / d.splash * 0.5), u)
             }
             if (t.kind != K_B) for (b in ArrayList(blds)) if (b.team != u.team && !b.dead && distRectPt(t.x, t.y, entRect(b)) < d.splash * 0.5) damage(b, d.atk * d.vsBld * 0.5, u)
+        } else if (u.type == U_GREN) {
+            // граната: летит дугой и рвётся, задевая всех рядом
+            val tx = t.x + (rnd() - 0.5) * 14
+            val ty = t.y + (rnd() - 0.5) * 14
+            proj.add(Proj(u.x + u.face * 6, u.y - 14, tx, ty, max(0.45, dist / 200), u.team, d.atk * atkBonus(u), d.splash, u, d.vsBld))
+            u.hitT = 0.25
+            host.sfx(S_MELEE, u.x, u.y)
+        } else if (u.type == U_MORTAR) {
+            // мортира: высокий навес, долгий полёт, большой разброс
+            val tx = t.x + (rnd() - 0.5) * 36
+            val ty = t.y + (rnd() - 0.5) * 36
+            proj.add(Proj(u.x + u.face * 6, u.y - 14, tx, ty, max(1.0, dist / 260), u.team, d.atk * atkBonus(u), d.splash, u, d.vsBld))
+            for (i in 0 until 6) smoke(u.x + u.face * 6, u.y - 16, (rnd() - 0.5) * 14, -16 - rnd() * 14, 2.0 + rnd(), 6 + rnd() * 5)
+            flash(u.x + u.face * 6, u.y - 16, 0.15, true)
+            host.sfx(S_CANNON, u.x, u.y)
         } else if (u.type == U_CANNON) {
             val tx = t.x + (rnd() - 0.5) * 22
             val ty = t.y + (rnd() - 0.5) * 22
@@ -1284,10 +1300,16 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
             if (b.type == B_BARRACKS) {
                 val mus = army.count { it.type == U_MUSKET }
                 val pk = army.count { it.type == U_PIKE }
+                val gr = army.count { it.type == U_GREN }
                 val want = if (mus < pk && !saveGold) U_MUSKET else U_PIKE
-                if (!enqueue(b, want) && !saveGold) enqueue(b, if (want == U_MUSKET) U_PIKE else U_MUSKET)
-            } else if (b.type == B_STABLE && reserve && !saveGold) enqueue(b, U_CAV)
+                if (time > 480 && !saveGold && gr * 3 < mus + pk && enqueue(b, U_GREN)) { }
+                else if (!enqueue(b, want) && !saveGold) enqueue(b, if (want == U_MUSKET) U_PIKE else U_MUSKET)
+            } else if (b.type == B_STABLE && reserve && !saveGold) {
+                val dr = army.count { it.type == U_DRAGOON }
+                if (!(dr < army.count { it.type == U_CAV } && enqueue(b, U_DRAGOON))) enqueue(b, U_CAV)
+            }
             else if (b.type == B_FOUNDRY && cannons < P.cannons && !saveGold) enqueue(b, U_CANNON)
+            else if (b.type == B_FOUNDRY && time > 700 && !saveGold && army.count { it.type == U_MORTAR } + b.queue.size < (P.cannons + 1) / 2) enqueue(b, U_MORTAR)
             else if (b.type == B_LAIR && army.count { it.type == U_DRAGON } + b.queue.size < P.dragons) enqueue(b, U_DRAGON)
             else if (BLD[b.type].research.isNotEmpty() && b.queue.isEmpty() && !saveGold) {
                 // улучшения, только когда есть запас сверх цены

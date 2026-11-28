@@ -116,19 +116,19 @@ function bakeModel(makeFor, teams, frames) {
 
 const BAKE_FRAMES = [{ kind: 'idle' }, ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ kind: 'walk', i: i / 2, ph: i * Math.PI / 4 })), ...[0, 1, 2].map((i) => ({ kind: 'act', i })), { kind: 'dead' }];
 function deadWrap(type, obj) {
-  if (type === 'cav') { const w = new THREE.Group(); obj.rotation.x = Math.PI / 2 * 0.95; obj.position.y = 5; w.add(obj); return w; }
-  if (type === 'cannon') { obj.rotation.z = 0.3; obj.position.y = -2.5; }
+  if (type === 'cav' || type === 'dragoon') { const w = new THREE.Group(); obj.rotation.x = Math.PI / 2 * 0.95; obj.position.y = 5; w.add(obj); return w; }
+  if (type === 'cannon' || type === 'mortar') { obj.rotation.z = 0.3; obj.position.y = -2.5; }
   return obj;
 }
 
 window.bakeAll = async function () {
   await kkLoad();
   const out = {}, t0 = Date.now();
-  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon };
+  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon, grenadier: kkGrenadier, dragoon: kkDragoon, mortar: kkMortar };
   for (const k in U) {
     out['u_' + k] = bakeModel((team, f) => {
       const fr = BAKE_FRAMES[f];
-      if (fr.kind === 'dead') return deadWrap(k, U[k](team, (k === 'cav' || k === 'cannon') ? { kind: 'idle' } : fr));
+      if (fr.kind === 'dead') return deadWrap(k, U[k](team, (k === 'cav' || k === 'cannon' || k === 'dragoon' || k === 'mortar') ? { kind: 'idle' } : fr));
       return U[k](team, fr);
     }, 2, BAKE_FRAMES.length);
   }
