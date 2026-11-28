@@ -20,6 +20,9 @@
 | academy.glb | [Low Poly Medieval Gothic Church](https://sketchfab.com/3d-models/low-poly-medieval-gothic-church-b5eaf6f238b1490a80c682ed238a7230) | AlexFerrart3D | b5eaf6f238b1490a80c682ed238a7230 |
 | tower.glb | [Medieval Tower](https://sketchfab.com/3d-models/medieval-tower-6c821f2aae3b4e8db5d94c6f48fb568b) | Den (dfomenco) | 6c821f2aae3b4e8db5d94c6f48fb568b |
 | mill.glb | [Windmill Low Poly](https://sketchfab.com/3d-models/windmill-low-poly-36e96a2d6a944ad3ac75964022638ad3) | Aegis_Wolf | 36e96a2d6a944ad3ac75964022638ad3 |
+| pine.glb | [Pine Tree [Game-ready]](https://sketchfab.com/3d-models/pine-tree-game-ready-dc3fbd9205cf4027a4455d1f415e0478) | Wenedi | dc3fbd9205cf4027a4455d1f415e0478 |
+| leaf.glb | [Leaf Tree - PS1 Low Poly](https://sketchfab.com/3d-models/leaf-tree-ps1-low-poly-d799c08100974e1ba352fcd646cb0694) | Wersaus33 | d799c08100974e1ba352fcd646cb0694 |
+| birch.glb | [Birch Trees Pack, PS1 Low Poly](https://sketchfab.com/3d-models/birch-trees-pack-ps1-low-poly-5f9aa7c0a3cf4298a4cac9d4cea59643) | Vova Truestory (FlowOff) | 5f9aa7c0a3cf4298a4cac9d4cea59643 |
 
 Скачать (нужен свой API-токен Sketchfab в переменной `SKETCHFAB_TOKEN`):
 

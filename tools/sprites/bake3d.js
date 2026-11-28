@@ -99,6 +99,7 @@ const ATLAS = 1024;
 function buildAtlas(UV, TX) {
   const texs = [...new Set(TX.filter((t) => t))];
   if (!texs.length) return null;
+  const alpha = texs.some((t) => t.userData && t.userData.alpha), ATLAS = alpha ? 512 : 1024;
   const g = Math.ceil(Math.sqrt(texs.length)), cs = ATLAS / g, m = 6;
   // сколько раз текстура повторяется на самом «длинном» треугольнике (не больше ATLAS_REP)
   const rep = texs.map(() => 1);
@@ -107,10 +108,12 @@ function buildAtlas(UV, TX) {
     for (let q = 0; q < 6; q++) rep[k] = Math.max(rep[k], Math.min(ATLAS_REP, Math.ceil(UV[tri * 6 + q] - 1e-4)));
   }
   const cv = document.createElement('canvas'); cv.width = cv.height = ATLAS;
+  // листва (userData.alpha): атлас с прозрачностью, сохраняется в PNG
   const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, ATLAS, ATLAS);
   texs.forEach((t, k) => {
     const x = (k % g) * cs, y = Math.floor(k / g) * cs, K = rep[k], ts = (cs - 2 * m) / K;
     cx.save(); cx.beginPath(); cx.rect(x, y, cs, cs); cx.clip();
+    if (t.userData && t.userData.alpha) cx.clearRect(x, y, cs, cs);
     if (t.userData && t.userData.gain) cx.filter = 'brightness(' + t.userData.gain + ')';
     // плитка K×K и ещё ряд вокруг: поля клетки заполнены продолжением текстуры, швов не видно
     for (let i = -1; i <= K; i++) for (let j = -1; j <= K; j++) cx.drawImage(t.image, x + m + i * ts, y + m + j * ts, ts + 0.5, ts + 0.5);
@@ -126,7 +129,7 @@ function buildAtlas(UV, TX) {
       out[j] = (x + m + Math.min(K, UV[j]) / K * (cs - 2 * m)) / ATLAS; out[j + 1] = (y + m + Math.min(K, UV[j + 1]) / K * (cs - 2 * m)) / ATLAS;
     }
   }
-  return { uv: out, url: cv.toDataURL('image/jpeg', 0.86) };
+  return { uv: out, url: alpha ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', 0.86), ext: alpha ? 'png' : 'jpg' };
 }
 const ATLAS_REP = 4;
 function enc16uv(arr) { const o = new Int16Array(arr.length); for (let i = 0; i < arr.length; i++) o[i] = arr[i] < 0 ? -32767 : Math.round(arr[i] * 32767); return o; }
@@ -166,7 +169,7 @@ function bakeModel(makeFor, teams, frames) {
   const idx = new Uint16Array(n); for (let i = 0; i < n; i++) idx[i] = remap[i];
   const pick = (src, comp, Ctor) => { const o = new Ctor(u * comp); uniq.forEach((i, k) => { for (let c = 0; c < comp; c++) o[k * comp + c] = src[i * comp + c]; }); return o; };
   return { n: u, tris: n / 3, idx, colors: cols.map((c) => pick(c, 3, Uint8Array)), pos: P.map((p) => pick(p, 3, Int16Array)),
-    uv: UVq ? pick(UVq, 2, Int16Array) : null, tex: atlas ? atlas.url : null };
+    uv: UVq ? pick(UVq, 2, Int16Array) : null, tex: atlas ? atlas.url : null, ext: atlas ? atlas.ext : null };
 }
 
 const BAKE_FRAMES = [{ kind: 'idle' }, ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ kind: 'walk', i: i / 2, ph: i * Math.PI / 4 })), ...[0, 1, 2].map((i) => ({ kind: 'act', i })), { kind: 'dead' }];
@@ -200,7 +203,7 @@ window.bakeAll = async function () {
   for (const name in out) {
     const m = out[name];
     index[name] = { n: m.n, tris: m.tris, frames: m.pos.length, idx: push(m.idx), colors: m.colors.map(push), pos: m.pos.map(push) };
-    if (m.uv) { index[name].uv = push(m.uv); index[name].tex = 'tex_' + name + '.jpg'; texOut[index[name].tex] = m.tex; }
+    if (m.uv) { index[name].uv = push(m.uv); index[name].tex = 'tex_' + name + '.' + m.ext; texOut[index[name].tex] = m.tex; }
   }
   const all = new Uint8Array(off); let p = 0; for (const c of chunks) { all.set(c, p); p += c.byteLength; }
   let s = ''; for (let i = 0; i < all.length; i += 0x8000) s += String.fromCharCode.apply(null, all.subarray(i, i + 0x8000));

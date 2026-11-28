@@ -230,7 +230,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
     private fun create() {
         chunkTex.clear(); gen = -1
         pModel = prog(VS_MODEL, FS_MODEL, uM, "uVP", "uLVP", "uPos", "uRows", "uShadow", "uFog", "uLight", "uMap", "uAlb")
-        pShadow = prog(VS_MODEL_SHADOW, FS_EMPTY, uS, "uLVP", "uPos", "uRows")
+        pShadow = prog(VS_MODEL_SHADOW, FS_SHADOW, uS, "uLVP", "uPos", "uRows", "uAlb")
         pGround = prog(VS_GROUND, FS_GROUND, uG, "uVP", "uLVP", "uRect", "uUV", "uTex", "uShadow", "uFog", "uWater", "uMap", "uTime", "uHgt", "uAmp", "uLight", "uDet")
         pDecal = prog(VS_DECAL, FS_DECAL, uD, "uVP", "uFog", "uMap", "uHgt", "uAmp")
         val ext = glGetString(GL_EXTENSIONS) ?: ""
@@ -394,7 +394,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glEnable(GL_POLYGON_OFFSET_FILL); glPolygonOffset(2.5f, 6f)
         glUseProgram(pShadow)
         glUniformMatrix4fv(uS["uLVP"]!!, 1, false, f.lvp, 0)
-        glUniform1i(uS["uPos"]!!, 0)
+        glUniform1i(uS["uPos"]!!, 0); glUniform1i(uS["uAlb"]!!, 6)
         uploadInst(f)
         for (b in 0 until f.nbOpaque) drawBatch(f, b, uS["uRows"]!!)
         glDisable(GL_POLYGON_OFFSET_FILL)
@@ -605,7 +605,14 @@ void main() {
 }
 """
         const val VS_MODEL_SHADOW = MODEL_COMMON + """
-void main() { gl_Position = uLVP * vec4(world(), 1.0); }
+out vec2 vUV;
+void main() { vUV = aUV; gl_Position = uLVP * vec4(world(), 1.0); }
+"""
+        const val FS_SHADOW = """#version 300 es
+precision mediump float;
+in vec2 vUV;
+uniform sampler2D uAlb;
+void main() { if (vUV.x >= 0.0 && texture(uAlb, vUV).a < 0.4) discard; }
 """
         const val FS_EMPTY = """#version 300 es
 precision mediump float;
@@ -637,7 +644,12 @@ void main() {
   float d = max(dot(n, uLight), 0.0) * shade(vL);
   float hemi = 0.5 + 0.5 * n.y;
   vec3 base = vCol;
-  if (vUV.x >= 0.0) base *= texture(uAlb, vUV).rgb;
+  if (vUV.x >= 0.0) {
+    // листва: прозрачные места текстуры вырезаются; цвет хранится умноженным на альфу
+    vec4 t = texture(uAlb, vUV);
+    if (t.a < 0.4) discard;
+    base *= t.rgb / t.a;
+  }
   vec3 col = base * (vec3(0.30, 0.31, 0.36) + vec3(0.26, 0.25, 0.22) * hemi + vec3(0.78, 0.72, 0.60) * d);
   if (vC.x > 0.5) {
     vec3 tc = vC.x < 1.5 ? vec3(0.45, 1.0, 0.45) : vC.x < 2.5 ? vec3(1.0, 0.35, 0.3) : vec3(1.0, 0.95, 0.8);

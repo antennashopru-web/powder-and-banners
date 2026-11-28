@@ -534,7 +534,8 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "конь — «Horse», MAXDESIGN-3D; ратуша — «Rauma Town Hall», Karumaki; дом — «Half-timbered House», Kovonic; склад — «Old European House», Valkirin1; казарма — «Viking town Hall», Bucks (Its_Bucks); " +
             "конюшня — «Old Wooden Barn (House 4)», Blenderust (narighillya); литейная — «Old Smithy», lucasprs51450; арсенал — «Medieval house, Generic Textures», by__Rx; академия — «Low Poly Medieval Gothic Church», AlexFerrart3D; " +
             "башня — «Medieval Tower», Den (dfomenco); " +
-            "мельница — «Windmill Low Poly», Aegis_Wolf. Модели уменьшены и подогнаны под игру, добавлены цвета команд."), 12f).apply {
+            "мельница — «Windmill Low Poly», Aegis_Wolf; ели — «Pine Tree [Game-ready]», Wenedi; лиственные деревья — «Leaf Tree - PS1 Low Poly», Wersaus33; " +
+            "берёзы — «Birch Trees Pack, PS1 Low Poly», Vova Truestory (FlowOff). Модели уменьшены и подогнаны под игру, добавлены цвета команд."), 12f).apply {
             alpha = 0.75f; setLineSpacing(0f, 1.25f); setPadding(0, dp(6), 0, 0)
         })
         c.addView(help, LinearLayout.LayoutParams(MP, WC))

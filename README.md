@@ -82,3 +82,6 @@
 | Дом | [Medieval House Low Poly](https://sketchfab.com/3d-models/medieval-house-low-poly-dd992c6d1aee4b1186aaab296f5727fe) | SantyFrow |
 | Башня | [Medieval Tower](https://sketchfab.com/3d-models/medieval-tower-6c821f2aae3b4e8db5d94c6f48fb568b) | Den (dfomenco) |
 | Мельница на ферме | [Windmill Low Poly](https://sketchfab.com/3d-models/windmill-low-poly-36e96a2d6a944ad3ac75964022638ad3) | Aegis_Wolf |
+| Ели | [Pine Tree [Game-ready]](https://sketchfab.com/3d-models/pine-tree-game-ready-dc3fbd9205cf4027a4455d1f415e0478) | Wenedi |
+| Лиственные деревья | [Leaf Tree - PS1 Low Poly](https://sketchfab.com/3d-models/leaf-tree-ps1-low-poly-d799c08100974e1ba352fcd646cb0694) | Wersaus33 |
+| Берёзы | [Birch Trees Pack, PS1 Low Poly](https://sketchfab.com/3d-models/birch-trees-pack-ps1-low-poly-5f9aa7c0a3cf4298a4cac9d4cea59643) | Vova Truestory (FlowOff) |
