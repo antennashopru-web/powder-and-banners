@@ -8,5 +8,5 @@ window.THREE = THREE; window.SkeletonUtils = SkeletonUtils;
 const loader = new GLTFLoader();
 window.loadGLTF = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
 const add = (src, next) => { const s = document.createElement('script'); s.src = src; s.onload = next; document.body.appendChild(s); };
-add('models.js', () => add('kkmodels.js', () => add('dragon.js', () => add('walls.js', () => add('troops.js', () => add('deco.js', () => add('bake3d.js', () => { window.READY = true; })))))));
+add('models.js', () => add('kkmodels.js', () => add('dragon.js', () => add('walls.js', () => add('troops.js', () => add('uniforms.js', () => add('deco.js', () => add('bake3d.js', () => { window.READY = true; }))))))));
 </script></body></html>

@@ -320,7 +320,8 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
                 D_CORPSE -> {
                     val fr = if (d.t < 0.3) Models3D.F_IDLE else Models3D.F_DEAD
                     val ang = (d.dir * PI / 4).toFloat()
-                    buckets[(Models3D.M_UNIT + d.type) * 2 + d.team.coerceIn(0, 1)].add(d.x.toFloat(), d.y.toFloat(), ang, 1f, fr.toFloat(), fr.toFloat(), 0f, a.toFloat().coerceIn(0.05f, 1f), 0f, 1f)
+                    val us = uScale(d.type)
+                    buckets[(Models3D.M_UNIT + d.type) * 2 + d.team.coerceIn(0, 1)].add(d.x.toFloat(), d.y.toFloat(), ang, us, fr.toFloat(), fr.toFloat(), 0f, us * a.toFloat().coerceIn(0.05f, 1f), 0f, 1f)
                     decal(d.x, d.y, 9.0, 6.0, 0xff3a1a10.toInt(), 0.35 * a, 0)
                 }
                 D_RUIN -> {
@@ -415,7 +416,8 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
                 val i = floor(ph).toInt()
                 fa = Models3D.F_WALK + Math.floorMod(i, 8); fb = Models3D.F_WALK + Math.floorMod(i + 1, 8); mix = (ph - i).toFloat()
             } else { fa = Models3D.F_IDLE; fb = fa }
-            buckets[(Models3D.M_UNIT + u.type) * 2 + u.team.coerceIn(0, 1)].add(u.x.toFloat(), u.y.toFloat(), ang, 1f, fa.toFloat(), fb.toFloat(), mix, 1f, 0f, 1f)
+            val us = uScale(u.type)
+            buckets[(Models3D.M_UNIT + u.type) * 2 + u.team.coerceIn(0, 1)].add(u.x.toFloat(), u.y.toFloat(), ang, us, fa.toFloat(), fb.toFloat(), mix, us, 0f, 1f)
         }
         // приказы и точки сбора
         for (m in G.markers) {
@@ -487,7 +489,9 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
     // ------------------------------------------------------------ выбор пальцем
     private val pr = FloatArray(3)
 
-    private fun unitHeight(u: Unt) = modelTop[Models3D.M_UNIT + u.type]
+    private fun unitHeight(u: Unt) = modelTop[Models3D.M_UNIT + u.type] * uScale(u.type)
+    /** пешие и конные чуть крупнее, чтобы форма и шляпы читались; пушки, башни и драконы как были */
+    private fun uScale(t: Int) = if (t == U_CANNON || t == U_MORTAR || t == U_SIEGE || t == U_DRAGON) 1f else 1.15f
 
     /** что под пальцем: отряд или здание по экрану, затем залежь или лес по точке на земле */
     fun pick(G: Game, sx: Float, sy: Float, wx: Double, wy: Double): Ent? {
