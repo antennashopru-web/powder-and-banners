@@ -2,10 +2,11 @@
 
 Все модели ниже — под лицензией Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/).
 В игре они уменьшены, текстуры собраны в атлас 1024×1024 на модель,
-добавлены цвета команд; коню добавлены седло и чепрак. Авторы указаны в игре (Помощь → «Графика»).
+добавлены цвета команд; коню добавлены седло и чепрак. Солдату поставлен свой скелет (soldier.js), сетка упрощена, мундир перекрашен в цвет команды. Авторы указаны в игре (Помощь → «Графика»).
 
 | Файл в `skf/` | Модель | Автор | uid |
 |---|---|---|---|
+| soldier.glb | [European Soldier 17th Century](https://sketchfab.com/3d-models/european-soldier-17th-century-7fc4d303a8654908aa56711c6e3078d8) | HaiPham | 7fc4d303a8654908aa56711c6e3078d8 |
 | cannon.glb | [Canon 17th Century](https://sketchfab.com/3d-models/canon-17th-century-5ce4c3b2ece04e6c960ce14dd12bb0fe) | iZnoGouD | 5ce4c3b2ece04e6c960ce14dd12bb0fe |
 | mortar.glb | [Cannon Low-Poly](https://sketchfab.com/3d-models/cannon-low-poly-34bdf984f4424a87af5b9e44ffb31859) | derdaryen | 34bdf984f4424a87af5b9e44ffb31859 |
 | horse.glb | [Horse](https://sketchfab.com/3d-models/horse-6d0f9c1ce82f41048a282b6c47a50684) | MAXDESIGN-3D | 6d0f9c1ce82f41048a282b6c47a50684 |

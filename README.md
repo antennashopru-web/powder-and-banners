@@ -68,6 +68,7 @@
 
 | Что в игре | Модель | Автор |
 |---|---|---|
+| Солдаты (все пешие и всадники) | [European Soldier 17th Century](https://sketchfab.com/3d-models/european-soldier-17th-century-7fc4d303a8654908aa56711c6e3078d8) | HaiPham |
 | Пушка | [Canon 17th Century](https://sketchfab.com/3d-models/canon-17th-century-5ce4c3b2ece04e6c960ce14dd12bb0fe) | iZnoGouD |
 | Мортира | [Cannon Low-Poly](https://sketchfab.com/3d-models/cannon-low-poly-34bdf984f4424a87af5b9e44ffb31859) | derdaryen |
 | Конь (рейтары, драгуны) | [Horse](https://sketchfab.com/3d-models/horse-6d0f9c1ce82f41048a282b6c47a50684) | MAXDESIGN-3D |

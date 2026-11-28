@@ -4,7 +4,7 @@ import json, os, sys, time, urllib.request
 MODELS = {
     'cannon': '5ce4c3b2ece04e6c960ce14dd12bb0fe', 'mortar': '34bdf984f4424a87af5b9e44ffb31859',
     'horse': '6d0f9c1ce82f41048a282b6c47a50684', 'house': 'dd992c6d1aee4b1186aaab296f5727fe',
-    'tower': '6c821f2aae3b4e8db5d94c6f48fb568b', 'mill': '36e96a2d6a944ad3ac75964022638ad3',
+    'tower': '6c821f2aae3b4e8db5d94c6f48fb568b', 'soldier': '7fc4d303a8654908aa56711c6e3078d8', 'mill': '36e96a2d6a944ad3ac75964022638ad3',
 }
 tok = os.environ.get('SKETCHFAB_TOKEN') or sys.exit('нужен SKETCHFAB_TOKEN')
 os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'skf'), exist_ok=True)

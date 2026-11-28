@@ -76,7 +76,10 @@ function bakeFrame(root, withColor) {
       if (base) {
         let r = base.r, g = base.g, bl = base.b;
         if (base.m.map && uv && !textured) { const s = sample(base.m.map, uv.getX(i), uv.getY(i)); r *= s[0]; g *= s[1]; bl *= s[2]; }
-        if (col && base.m.vertexColors) { r *= col.getX(i); g *= col.getY(i); bl *= col.getZ(i); }
+        if (col && base.m.vertexColors) {
+          if (o.userData.triAvg) { r *= Math.pow(col.getX(i), 1 / 2.2); g *= Math.pow(col.getY(i), 1 / 2.2); bl *= Math.pow(col.getZ(i), 1 / 2.2); }
+          else { r *= col.getX(i); g *= col.getY(i); bl *= col.getZ(i); }
+        }
         C.push(Math.min(1, r + base.er), Math.min(1, g + base.eg), Math.min(1, bl + base.eb));
       }
     }

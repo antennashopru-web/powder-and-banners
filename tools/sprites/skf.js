@@ -73,7 +73,12 @@ function horse(color, cloth, ph, gallop) {
   const o = skfClone('horse');
   // масть: темнее или светлее исходной гнедой, по яркости заданного цвета
   const c = new THREE.Color(color), l = (c.r + c.g + c.b) / 3, kc = Math.max(0.55, Math.min(1.35, l / 0.3));
-  o.traverse((m) => { if (m.isMesh) { m.material = m.material.clone(); m.material.color.multiplyScalar(kc); } });
+  o.traverse((m) => {
+    if (!m.isMesh) return;
+    m.material = m.material.clone(); m.material.color.multiplyScalar(kc);
+    // грива и хвост — полупрозрачные пряди; в игре без прозрачности, поэтому просто тёмные
+    if (/Object_65/.test(m.name)) { m.material.map = null; m.material.color.setHex(0x1c140e); }
+  });
   horsePose(o, gallop ? HORSE_GALLOP[0] + (HORSE_GALLOP[1] - HORSE_GALLOP[0]) * ((((ph / (Math.PI * 2)) % 1) + 1) % 1) : HORSE_IDLE);
   // поворот и размер считаем один раз по стойке, чтобы конь не «прыгал» между кадрами
   if (!SKF.horseFit) {
