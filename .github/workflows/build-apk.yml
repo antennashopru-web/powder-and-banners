@@ -69,9 +69,9 @@ jobs:
             mkdir -p shots
             adb install -r PowderAndBanners.apk
             adb shell am start -n ru.argeda.powder/.MainActivity
-            sleep 2
+            sleep 5
             adb exec-out screencap -p > shots/0-splash.png
-            sleep 20
+            sleep 17
             adb exec-out screencap -p > shots/1-menu.png
             adb shell am force-stop ru.argeda.powder
             adb shell am start -n ru.argeda.powder/.MainActivity --ei start 1 --ez autopilot true --ei speed 3

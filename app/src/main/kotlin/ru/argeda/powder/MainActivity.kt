@@ -497,9 +497,12 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             paint.shader = LinearGradient(0f, 0f, 0f, textSize * 1.1f, intArrayOf(0xfffff0b8.toInt(), 0xffffd77a.toInt(), 0xffc8892e.toInt()), null, Shader.TileMode.CLAMP)
         })
         c.addView(ornament(), LinearLayout.LayoutParams(MP, WC).apply { topMargin = dp(6); bottomMargin = dp(2) })
-        c.addView(tv("Стратегия эпохи пик и мушкетов", 16f).apply {
+        val sub = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        sub.addView(tv("Стратегия эпохи пик и мушкетов", 16f).apply {
             setTypeface(serif, Typeface.ITALIC); alpha = 0.85f; setPadding(0, dp(2), 0, dp(6))
-        })
+        }, LinearLayout.LayoutParams(0, WC, 1f))
+        sub.addView(btn("⟳ Обновить", 14f, woodBtn(), 7, 14) { Updater.check(this, true) }, LinearLayout.LayoutParams(WC, WC))
+        c.addView(sub, LinearLayout.LayoutParams(MP, WC))
         menuIcons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         c.addView(menuIcons, LinearLayout.LayoutParams(WC, WC).apply { bottomMargin = dp(4) })
         c.addView(row("Противник", seg(arrayOf("Лёгкий", "Обычный", "Трудный"), 1) { optDiff = it }))
@@ -515,7 +518,6 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
         contBtn = midBtn("▶ Продолжить") { loadGame() }
         contBtn.visibility = View.GONE
         c.addView(contBtn)
-        c.addView(midBtn("⟳ Обновить игру") { Updater.check(this, true) })
         val help = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         c.addView(tv("Как играть", 14f).apply {
             paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG; alpha = 0.85f; setPadding(dp(8), dp(12), dp(8), dp(4)); isClickable = true
