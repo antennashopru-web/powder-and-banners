@@ -628,6 +628,7 @@ void main() {
   if (vK < 0.5) a = smoothstep(1.0, 0.55, r);
   else if (vK < 1.5) a = smoothstep(0.72, 0.84, r) * smoothstep(1.0, 0.9, r) + 0.18 * step(r, 0.9);
   else if (vK < 2.5) { float e = max(abs(vQ.x), abs(vQ.y)); a = 0.35 + 0.65 * step(0.9, e); }
+  else if (vK > 3.5) a = smoothstep(0.93, 0.965, r) * smoothstep(1.0, 0.975, r) + 0.07 * step(r, 0.97);
   else a = step(r, 1.0);
   if (a <= 0.003) discard;
   vec4 f = texture(uFog, vW / uMap);

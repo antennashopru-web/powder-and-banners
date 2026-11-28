@@ -389,6 +389,11 @@ class GameView(ctx: Context, val spr: Sprites) : View(ctx) {
                 pf.color = rgba(col[0], col[1], col[2], .18); oval(c, x, y, (u.r + 3).toFloat(), ((u.r + 3) * 0.45).toFloat(), pf)
                 ps.color = rgba(col[0], col[1], col[2], .95); ps.strokeWidth = 1.4f; oval(c, x, y, (u.r + 3).toFloat(), ((u.r + 3) * 0.45).toFloat(), ps)
             }
+            if (u.type == U_HERO) {
+                // золотое кольцо воодушевления
+                ps.color = rgba(255, 210, 90, .45 + 0.2 * kotlin.math.sin(t * 3)); ps.strokeWidth = 1.6f
+                oval(c, x, y, HERO_AURA.toFloat(), (HERO_AURA * 0.5).toFloat(), ps)
+            }
             spr.drawUnit(c, u.type, u.team, u.dir, unitFrame(u), x, y, pb)
             if (u.carry > 0 && !u.working && u.carryType >= 0) {
                 pf.color = RCOL[u.carryType]; c.drawRect(x - 7, y - 15, x - 2, y - 9, pf)

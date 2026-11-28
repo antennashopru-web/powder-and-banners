@@ -506,13 +506,23 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     /** кто может бить летающих: стрелки (кроме пушек), башни и ратуша */
     // ============================================================ улучшения
     fun lvl(team: Int, t: Int) = if (team in 0..1) tech[team][t] else 0
-    fun atkBonus(u: Unt): Double = when (u.type) {
-        U_PEASANT, U_PIKE, U_CAV -> 1 + 0.15 * lvl(u.team, T_BLADES)
+    fun atkBonus(u: Unt): Double = (when (u.type) {
+        U_PEASANT, U_PIKE, U_CAV, U_HERO -> 1 + 0.15 * lvl(u.team, T_BLADES)
         U_MUSKET, U_GREN, U_DRAGOON -> 1 + 0.15 * lvl(u.team, T_POWDER)
         U_CANNON, U_MORTAR -> 1 + 0.2 * lvl(u.team, T_ARTY)
         else -> 1.0
+    }) * (if (u.inspired) 1.25 else 1.0)
+    fun armorMul(t: Unt): Double = (if (t.type == U_PEASANT || UNIT[t.type].fly) 1.0 else 1 - 0.12 * lvl(t.team, T_ARMOR)) * (if (t.inspired) 0.85 else 1.0)
+    /** герой жив или уже учится */
+    fun hasHero(team: Int) = units.any { it.team == team && !it.dead && it.type == U_HERO } || blds.any { it.team == team && !it.dead && it.queue.contains(U_HERO) }
+    private var auraT = 0.0
+    private fun updateAura(dt: Double) {
+        auraT -= dt; if (auraT > 0) return
+        auraT = 0.4
+        val heroes = units.filter { it.type == U_HERO && !it.dead }
+        for (u in units) u.inspired = u.type != U_HERO && heroes.any { h -> h.team == u.team && hyp(h.x - u.x, h.y - u.y) < HERO_AURA }
+        for (h in heroes) if (h.hp < h.maxhp) h.hp = min(h.maxhp, h.hp + 4 * 0.4)
     }
-    fun armorMul(t: Unt): Double = if (t.type == U_PEASANT || UNIT[t.type].fly) 1.0 else 1 - 0.12 * lvl(t.team, T_ARMOR)
     fun spdOf(u: Unt): Double = UNIT[u.type].spd * (if (u.type == U_PEASANT) 1.0 else 1 + 0.1 * lvl(u.team, T_DRILL))
     fun rangeOf(u: Unt): Double = UNIT[u.type].range * (if (u.type == U_CANNON || u.type == U_MORTAR) 1 + 0.12 * lvl(u.team, T_ARTY) else 1.0)
     fun hpMul(team: Int): Double = 1 + 0.33 * lvl(team, T_MASON)
@@ -587,6 +597,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         walkTeam = -1
         for (k in blds.indices) { val b = blds[k]; if (!b.dead) updateBuilding(b, dt) }
         updateProj(dt)
+        updateAura(dt)
         for (f in fx) { f.t += dt; if (f.vx != 0.0 || f.vy != 0.0) { f.x += f.vx * dt; f.y += f.vy * dt } }
         fx.removeAll { it.t >= it.life }
         for (d in decals) d.t += dt
@@ -776,6 +787,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (src != null && src.team != t.team && src.team >= 0) stats[src.team].killed++
         if (t.team >= 0) stats[t.team].lost++
         if (t is Unt) {
+            if (t.type == U_HERO) host.toast(if (t.team == 0) "⚑ Наш генерал пал!" else "⚑ Вражеский генерал повержен!")
             val d = Decal(D_CORPSE, t.x, t.y, 40.0)
             d.type = t.type; d.team = t.team; d.face = t.face; d.dir = t.dir
             decals.add(d)
@@ -1092,6 +1104,7 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
     fun enqueue(b: Bld, type: Int): Boolean {
         val d = UNIT[type]
         if (b.queue.size >= 6) return false
+        if (type == U_HERO && hasHero(b.team)) return false
         if (!canAfford(b.team, d.cost)) return false
         pay(b.team, d.cost); b.queue.add(type)
         return true
@@ -1273,6 +1286,9 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         if (P.dragons > 0 && T >= 480 && count(B_LAIR) == 0 && count(B_BARRACKS) > 0 && pend.none { it.type == B_LAIR } && canAfford(team, BLD[B_LAIR].cost)) aiBuild(team, B_LAIR, A)
         val queued = halls.sumOf { h -> h.queue.count { it == U_PEASANT } }
         for (h in halls) if (h.built && peas.size + queued < P.peas && h.queue.size < 2) enqueue(h, U_PEASANT)
+        // герой, когда войско уже есть: копим на него золото
+        val wantHero = time > 480 && army.size >= 4 && !hasHero(team)
+        if (wantHero) halls.firstOrNull { it.built && it.queue.size < 2 }?.let { enqueue(it, U_HERO) }
         val have = IntArray(4)
         for (u in peas) { val t = u.task; if (t != null && t.type == TASK_GATHER) have[t.res]++ }
         val late = count(B_BARRACKS) > 0
@@ -1293,7 +1309,8 @@ class Game(val size: Int, val diff: Int, val auto: Boolean, var host: Host = NoH
         val reserve = pend.isEmpty()
         val needHouse = cap[team] < POP_MAX && cap[team] - pop[team] < 6
         // копим золото на дракона, если логово готово
-        val saveGold = myB.any { it.type == B_LAIR && it.built } && army.count { it.type == U_DRAGON } < P.dragons && R[GOLD] < UNIT[U_DRAGON].cost[GOLD]
+        val saveGold = (myB.any { it.type == B_LAIR && it.built } && army.count { it.type == U_DRAGON } < P.dragons && R[GOLD] < UNIT[U_DRAGON].cost[GOLD]) ||
+            (wantHero && R[GOLD] < UNIT[U_HERO].cost[GOLD])
         for (b in myB.sortedByDescending { it.type == B_LAIR }) {
             if (!b.built || b.queue.size >= 2) continue
             if (needHouse && R[WOOD] < 120 && b.type != B_HALL) continue

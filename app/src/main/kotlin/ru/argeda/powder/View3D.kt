@@ -300,6 +300,7 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
                 val col = if (u.team == 0) 0xff7cff6a.toInt() else 0xffff6a5a.toInt()
                 decal(u.x, u.y, u.r + 4, u.r + 4, col, 0.95, 1)
             }
+            if (u.type == U_HERO) decal(u.x, u.y, HERO_AURA, HERO_AURA, 0xffffd25a.toInt(), 0.75 + 0.2 * kotlin.math.sin(G.time * 3), 4)
             val target = (u.dir * PI / 4).toFloat()
             var ang = faceAng[u.id] ?: target
             var diff = target - ang

@@ -54,6 +54,9 @@ const val U_DRAGON = 5
 const val U_GREN = 6
 const val U_DRAGOON = 7
 const val U_MORTAR = 8
+const val U_HERO = 9
+/** радиус, в котором герой воодушевляет своих */
+const val HERO_AURA = 5.0 * 32
 /** стреляет из ружья или орудия: кадр выстрела по перезарядке */
 /** высота дуги снаряда (доля дальности) и его размер: мортира бьёт навесом, граната мелкая */
 fun projArc(src: Ent?) = when ((src as? Unt)?.type) { U_MORTAR -> 0.6; U_GREN -> 0.35; else -> 0.18 }
@@ -74,9 +77,11 @@ val UNIT = arrayOf(
         "Конный стрелок: быстро налетает и стреляет. Боится пик", ranged = true, cav = true),
     UDef("mortar", "Мортира", 120, 55.0, 420.0, 9.0, 22.0, 9, cost(wood = 180, stone = 100, gold = 120), 24.0, 3, 9.0,
         "Навесной огонь издалека: рушит стены и здания, вблизи беззащитна", ranged = true, splash = 50.0, vsBld = 3.5),
+    UDef("hero", "Генерал", 900, 40.0, 22.0, 1.0, 60.0, 9, cost(food = 200, gold = 150), 30.0, 3, 8.0,
+        "Герой, один на армию. Сильный боец, свои рядом бьют сильнее и держатся крепче"),
 )
 // pike 0, musket 1, cav 2, cannon 3, peasant 4
-val FORM_ORDER = intArrayOf(4, 0, 1, 2, 3, 5, 1, 2, 3)
+val FORM_ORDER = intArrayOf(4, 0, 1, 2, 3, 5, 1, 2, 3, 1)
 
 class BDef(
     val key: String, val name: String, val w: Int, val h: Int, val hp: Int, val cost: IntArray, val time: Double,
@@ -101,7 +106,7 @@ const val B_ACADEMY = 12
 fun isWall(type: Int) = type == B_WALL || type == B_GATE
 
 val BLD = arrayOf(
-    BDef("hall", "Ратуша", 3, 3, 2400, cost(wood = 300, stone = 200), 60.0, 9, "Сердце поселения: крестьяне и склад", pop = 15, drop = true, trains = intArrayOf(U_PEASANT), atk = 8.0, range = 200.0, cd = 2.0),
+    BDef("hall", "Ратуша", 3, 3, 2400, cost(wood = 300, stone = 200), 60.0, 9, "Сердце поселения: крестьяне, герой и склад", pop = 15, drop = true, trains = intArrayOf(U_PEASANT, U_HERO), atk = 8.0, range = 200.0, cd = 2.0),
     BDef("house", "Дом", 2, 2, 500, cost(wood = 60), 15.0, 4, "+10 к населению", pop = 10),
     BDef("farm", "Ферма", 3, 3, 400, cost(wood = 80), 18.0, 4, "Даёт еду, до 6 крестьян", farm = true),
     BDef("store", "Рынок", 2, 2, 600, cost(wood = 100), 18.0, 5, "Торговля ресурсами; сюда сдают добычу", drop = true),

@@ -299,6 +299,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                     val bx = h.x + 70; val by = h.y
                     for (k in 0 until 4) g.spawnUnit(U_GREN, 0, bx + 40, by - 36 + k * 18)
                     for (k in 0 until 3) g.spawnUnit(U_DRAGOON, 0, bx + 10, by - 60 + k * 24 + (if (k > 0) 60 else 0))
+                    g.spawnUnit(U_HERO, 0, bx + 16, by)
                     for (k in 0 until 2) g.spawnUnit(U_MORTAR, 0, bx - 20, by - 30 + k * 60).let { u -> wall?.let { w -> u.target = w } }
                     for (k in 0 until 6) g.spawnUnit(U_PIKE, 1, bx + 150 + (k % 2) * 16, by - 40 + (k / 2) * 18).let { u -> u.cmd = CMD_AMOVE; u.hasAmove = true; u.amX = h.x; u.amY = h.y; g.walkTeam = 1; g.goalPt(u, h.x, h.y, 10.0); g.walkTeam = -1 }
                     g.computePop()
@@ -519,6 +520,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
             "<b>Войска:</b> пикинёры держат конницу, мушкетёры бьют залпом издалека, рейтары быстры, пушки рушат здания и строи.",
             "<b>Улучшения:</b> Арсенал изучает закалённые клинки, кирасы и зернистый порох, Академия учит артиллеристов, каменщиков и строевой выучке. Улучшение действует на все ваши войска сразу, у многих две ступени.",
             "<b>Новые войска:</b> в Казарме — гренадеры, их гранаты рвутся и задевают всех рядом. В Конюшне — драгуны, конные стрелки. В Литейной — мортиры: бьют навесом очень далеко и ломают стены, но вблизи беззащитны.",
+            "<b>Герой Генерал:</b> нанимается в Ратуше, один на армию. Сильный боец, со временем сам залечивает раны. Свои войска рядом с ним бьют на четверть сильнее и получают меньше урона. Вокруг него видно золотое кольцо.",
             "<b>Стены и ворота:</b> выберите «Стена» и проведите пальцем по земле: стена тянется по прямой, по 10 камня за кусок. Ворота пропускают только своих, их можно поставить прямо на стену. Враг стену не обходит, а проламывает, пушки делают это быстрее всех.",
             "<b>Драконы:</b> стройте логово дракона. Драконы летают над лесом и водой и жгут огнём всё вокруг цели. Пикинёры, рейтары и пушки до них не достают: сбивают их мушкетёры, башни и ратуша.",
         )
@@ -818,7 +820,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 else if (t != null && t.type == TASK_REPAIR) "Чинит: " + BLD[t.b!!.type].name.lowercase()
                 else if (t != null) "Добывает: " + RNAME[t.res].lowercase() + (if (e.carry > 0) " (${e.carry})" else "")
                 else if (e.target != null) "В бою" else if (e.goal != null) "В пути" else "Ожидает"
-                setInfo(spr!!.unitIcons[e.type], d.name + if (e.team != 0) " (враг)" else "", e.hp / e.maxhp, "${ceil(e.hp).toInt()}/${e.maxhp.toInt()} · атака ${d.atk.toInt()}", -1.0, if (e.team != 0) d.desc else st)
+                setInfo(spr!!.unitIcons[e.type], d.name + if (e.team != 0) " (враг)" else "", e.hp / e.maxhp, "${ceil(e.hp).toInt()}/${e.maxhp.toInt()} · атака ${d.atk.toInt()}", -1.0, if (e.team != 0) d.desc else if (e.type == U_HERO && st == "Ожидает") "Свои рядом бьют сильнее" else st)
             } else if (e is Bld) {
                 val d = BLD[e.type]
                 val nm = d.name + if (e.team != 0) " (враг)" else ""
@@ -874,7 +876,8 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
                 for (t in d.trains) {
                     val q = b.queue.count { it == t }
                     actBtn(spr!!.unitIcons[t], UNIT[t].name, UNIT[t].cost, q) {
-                        if (!g.enqueue(b, t)) toast(if (b.queue.size >= 6) "Очередь заполнена" else "Не хватает: " + g.missing(UNIT[t].cost))
+                        if (t == U_HERO && g.hasHero(0)) toast("Генерал у вас уже есть: герой один на армию")
+                        else if (!g.enqueue(b, t)) toast(if (b.queue.size >= 6) "Очередь заполнена" else "Не хватает: " + g.missing(UNIT[t].cost))
                         else sfx(S_CLICK, Double.NaN, Double.NaN)
                     }
                 }
@@ -926,7 +929,7 @@ class MainActivity : Activity(), Host, Choreographer.FrameCallback {
 
     private fun plural(t: Int) = when (t) {
         U_PEASANT -> "крестьяне"; U_PIKE -> "пикинёры"; U_MUSKET -> "мушкетёры"; U_CAV -> "рейтары"; U_DRAGON -> "драконы"
-        U_GREN -> "гренадеры"; U_DRAGOON -> "драгуны"; U_MORTAR -> "мортиры"; else -> "пушки"
+        U_GREN -> "гренадеры"; U_DRAGOON -> "драгуны"; U_MORTAR -> "мортиры"; U_HERO -> "герои"; else -> "пушки"
     }
 
     private fun tradeBtn(label: String, ok: Boolean, f: () -> Unit) {

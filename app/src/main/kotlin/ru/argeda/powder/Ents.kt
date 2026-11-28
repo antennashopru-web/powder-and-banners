@@ -67,6 +67,8 @@ class Unt(val type: Int) : Ent(K_U) {
     var hasAmove = false
     var amX = 0.0
     var amY = 0.0
+    /** рядом свой герой */
+    var inspired = false
 }
 
 class Rally(val x: Double, val y: Double) {

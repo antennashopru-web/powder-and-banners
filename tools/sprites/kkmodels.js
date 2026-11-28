@@ -316,7 +316,7 @@ function kkNature() {
 window.kkRenderAll = async function (only) {
   await kkLoad();
   const res = { units: {}, blds: {} };
-  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon, grenadier: kkGrenadier, dragoon: kkDragoon, mortar: kkMortar };
+  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon, grenadier: kkGrenadier, dragoon: kkDragoon, mortar: kkMortar, hero: kkHero };
   for (const t in U) if (!only || only.includes(t)) res.units[t] = kkUnitAtlas(t, U[t]);
   if (!only || only.includes('blds')) { res.blds = kkBuildingAtlas(); if (typeof kkWallParts === 'function') res.wallparts = kkWallParts(); }
   if (!only || only.includes('nature')) Object.assign(res, kkNature());

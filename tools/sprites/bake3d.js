@@ -124,7 +124,7 @@ function deadWrap(type, obj) {
 window.bakeAll = async function () {
   await kkLoad();
   const out = {}, t0 = Date.now();
-  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon, grenadier: kkGrenadier, dragoon: kkDragoon, mortar: kkMortar };
+  const U = { peasant: kkPeasant, pike: kkPike, musket: kkMusket, cav: kkCav, cannon: kkCannon, dragon: kkDragon, grenadier: kkGrenadier, dragoon: kkDragoon, mortar: kkMortar, hero: kkHero };
   for (const k in U) {
     out['u_' + k] = bakeModel((team, f) => {
       const fr = BAKE_FRAMES[f];

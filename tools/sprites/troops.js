@@ -79,3 +79,21 @@ function kkMortar(team, fr) {
   const w = wrapChar(rig); w.position.set(-14, 0, -8); w.scale.setScalar(0.95); g.add(w);
   return g;
 }
+
+// герой «Генерал»: рыцарь без шлема, шляпа с пышным пером цвета команды, шпага и плащ
+function plumedHat(team) {
+  const g = tricorne(team);
+  const pl = sph(0.22, mat(TEAMS[team].light), 0.1, 0.32, 0.18, 10, 8); pl.scale.set(1.6, 0.8, 0.9); g.add(pl);
+  const pl2 = sph(0.16, mat(0xf4f0e8), -0.12, 0.3, 0.22, 8, 6); pl2.scale.set(1.5, 0.8, 0.9); g.add(pl2);
+  return shadows(g);
+}
+function kkHero(team, fr) {
+  const rig = charRig('Knight', team, ['Knight_Cape', '1H_Sword']);
+  const hat = plumedHat(team); hat.position.set(0, 0.96, 0); hat.scale.setScalar(1.2); rig.bones.head.add(hat);
+  if (fr.kind === 'walk') pose(rig, 'Walking_A', fr.i / 4);
+  else if (fr.kind === 'act') pose(rig, '1H_Melee_Attack_Slice_Diagonal', [0.25, 0.42, 0.6][fr.i]);
+  else if (fr.kind === 'dead') DEATH(rig);
+  else pose(rig, 'Idle', 0);
+  const w = wrapChar(rig); w.scale.multiplyScalar(1.15);
+  return w;
+}
