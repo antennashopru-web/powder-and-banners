@@ -1,0 +1,61 @@
+Applications Graphics Acceleration Info:
+Uptime: 476354 Realtime: 476354
+
+** Graphics info for pid 4661 [ru.argeda.powder] **
+
+Stats since: 80082640396ns
+Total frames rendered: 1095
+Janky frames: 1095 (100.00%)
+50th percentile: 650ms
+90th percentile: 1150ms
+95th percentile: 1250ms
+99th percentile: 1550ms
+Number Missed Vsync: 1050
+Number High input latency: 0
+Number Slow UI thread: 833
+Number Slow bitmap uploads: 268
+Number Slow issue draw commands: 1095
+Number Frame deadline missed: 1095
+HISTOGRAM: 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 53ms=1 57ms=1 61ms=1 65ms=0 69ms=2 73ms=3 77ms=2 81ms=3 85ms=2 89ms=3 93ms=6 97ms=3 101ms=8 105ms=9 109ms=12 113ms=15 117ms=11 121ms=24 125ms=12 129ms=14 133ms=25 150ms=114 200ms=9 250ms=8 300ms=9 350ms=12 400ms=15 450ms=21 500ms=47 550ms=44 600ms=51 650ms=63 700ms=39 750ms=23 800ms=29 850ms=37 900ms=62 950ms=69 1000ms=34 1050ms=42 1100ms=54 1150ms=59 1200ms=28 1250ms=21 1300ms=14 1350ms=7 1400ms=5 1450ms=3 1500ms=4 1550ms=6 1600ms=2 1650ms=3 1700ms=2 1750ms=1 1800ms=0 1850ms=1 1900ms=0 1950ms=0 2000ms=0 2050ms=0 2100ms=0 2150ms=0 2200ms=0 2250ms=0 2300ms=0 2350ms=0 2400ms=0 2450ms=0 2500ms=0 2550ms=0 2600ms=0 2650ms=0 2700ms=0 2750ms=0 2800ms=0 2850ms=0 2900ms=0 2950ms=0 3000ms=0 3050ms=0 3100ms=0 3150ms=0 3200ms=0 3250ms=0 3300ms=0 3350ms=0 3400ms=0 3450ms=0 3500ms=0 3550ms=0 3600ms=0 3650ms=0 3700ms=0 3750ms=0 3800ms=0 3850ms=0 3900ms=0 3950ms=0 4000ms=0 4050ms=0 4100ms=0 4150ms=0 4200ms=0 4250ms=0 4300ms=0 4350ms=0 4400ms=0 4450ms=0 4500ms=0 4550ms=0 4600ms=0 4650ms=0 4700ms=0 4750ms=0 4800ms=0 4850ms=0 4900ms=0 4950ms=0
+50th gpu percentile: 4950ms
+90th gpu percentile: 4950ms
+95th gpu percentile: 4950ms
+99th gpu percentile: 4950ms
+GPU HISTOGRAM: 1ms=0 2ms=2 3ms=3 4ms=2 5ms=7 6ms=8 7ms=17 8ms=19 9ms=30 10ms=20 11ms=26 12ms=18 13ms=28 14ms=24 15ms=17 16ms=26 17ms=29 18ms=24 19ms=29 20ms=21 21ms=25 22ms=25 23ms=18 24ms=28 25ms=28 4950ms=618
+Font Cache (CPU):
+  Size: 652.32 kB 
+  Glyph Count: 69 
+CPU Caches:
+GPU Caches:
+  Other:
+    Other: 34.65 KB (1 entry)
+    Buffer Object: 2.05 KB (2 entries)
+  Shadow Gaussian Falloff:
+    Texture: 128.00 bytes (1 entry)
+  Image:
+    Texture: 108.14 KB (2 entries)
+  Scratch:
+    RenderTarget: 864.00 KB (4 entries)
+    Texture: 8.09 MB (3 entries)
+    Buffer Object: 174.00 KB (5 entries)
+Other Caches:
+                         Current / Maximum
+  Layers Total           0.00 KB (numLayers = 0)
+Total GPU memory usage:
+  9689968 bytes, 9.24 MB (858.07 KB is purgeable)
+
+
+Pipeline=Skia (OpenGL)
+Profile data in ms:
+
+	ru.argeda.powder/ru.argeda.powder.MainActivity/android.view.ViewRootImpl@49802e (visibility=0)
+View hierarchy:
+
+  ru.argeda.powder/ru.argeda.powder.MainActivity/android.view.ViewRootImpl@49802e
+  131 views, 225.66 kB of render nodes
+
+
+Total ViewRootImpl   : 1
+Total attached Views : 131
+Total RenderNode     : 225.66 kB (used) / 472.49 kB (capacity)
+
