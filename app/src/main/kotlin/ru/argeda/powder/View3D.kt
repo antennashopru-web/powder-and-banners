@@ -35,7 +35,10 @@ import kotlin.math.sqrt
  */
 @SuppressLint("ViewConstructor")
 class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayout(ctx) {
-    val renderer = Renderer3D(models)
+    val renderer = Renderer3D(models).apply {
+        // мелкая травяная фактура (сделана через Kie, обработана в бесшовную серую карту)
+        detail = try { ctx.assets.open("textures/grass_detail.png").use { android.graphics.BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }
+    }
     private val glv = GLSurfaceView(ctx)
     private val ov = Overlay(ctx)
     val cam = Cam3D()

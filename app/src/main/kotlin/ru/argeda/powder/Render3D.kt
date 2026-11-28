@@ -193,6 +193,9 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
     private var waterTex = 0
     private var lowTex = 0
     private var hgtTex = 0
+    private var detTex = 0
+    /** серая бесшовная фактура травы; null — без неё */
+    var detail: Bitmap? = null
     private var dummyFog = true
     private var aniso = 0f
 
@@ -227,7 +230,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         chunkTex.clear(); gen = -1
         pModel = prog(VS_MODEL, FS_MODEL, uM, "uVP", "uLVP", "uPos", "uRows", "uShadow", "uFog", "uLight", "uMap")
         pShadow = prog(VS_MODEL_SHADOW, FS_EMPTY, uS, "uLVP", "uPos", "uRows")
-        pGround = prog(VS_GROUND, FS_GROUND, uG, "uVP", "uLVP", "uRect", "uUV", "uTex", "uShadow", "uFog", "uWater", "uMap", "uTime", "uHgt", "uAmp", "uLight")
+        pGround = prog(VS_GROUND, FS_GROUND, uG, "uVP", "uLVP", "uRect", "uUV", "uTex", "uShadow", "uFog", "uWater", "uMap", "uTime", "uHgt", "uAmp", "uLight", "uDet")
         pDecal = prog(VS_DECAL, FS_DECAL, uD, "uVP", "uFog", "uMap", "uHgt", "uAmp")
         val ext = glGetString(GL_EXTENSIONS) ?: ""
         if (ext.contains("GL_EXT_texture_filter_anisotropic")) {
@@ -324,6 +327,20 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
             if (t == hgtTex) px.put(byteArrayOf(0, 0, 0, 0)) else px.put(byteArrayOf(30, 24, 16, 0)); px.flip()
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, px)
         }
+        // фактура травы: повтор, мипмапы
+        glGenTextures(1, ids, 0); detTex = ids[0]
+        glBindTexture(GL_TEXTURE_2D, detTex)
+        val db = detail
+        if (db != null && !db.isRecycled) GLUtils.texImage2D(GL_TEXTURE_2D, 0, db, 0)
+        else {
+            val px = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder()); px.put(byteArrayOf(-128, -128, -128, -1)); px.flip()
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, px)
+        }
+        glGenerateMipmap(GL_TEXTURE_2D)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
         dummyFog = true
         ctxGen.incrementAndGet()
     }
@@ -362,6 +379,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, fogTex)
         glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, waterTex)
         glActiveTexture(GL_TEXTURE4); glBindTexture(GL_TEXTURE_2D, hgtTex)
+        glActiveTexture(GL_TEXTURE5); glBindTexture(GL_TEXTURE_2D, detTex)
         // земля
         glUseProgram(pGround)
         glUniformMatrix4fv(uG["uVP"]!!, 1, false, f.vp, 0)
@@ -369,7 +387,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glUniform1i(uG["uTex"]!!, 0); glUniform1i(uG["uShadow"]!!, 1); glUniform1i(uG["uFog"]!!, 2); glUniform1i(uG["uWater"]!!, 3)
         glUniform2f(uG["uMap"]!!, f.mapW, f.mapH)
         glUniform1f(uG["uTime"]!!, f.time)
-        glUniform1i(uG["uHgt"]!!, 4); glUniform1f(uG["uAmp"]!!, Relief.AMP)
+        glUniform1i(uG["uHgt"]!!, 4); glUniform1f(uG["uAmp"]!!, Relief.AMP); glUniform1i(uG["uDet"]!!, 5)
         glUniform3f(uG["uLight"]!!, Cam3D.LX, Cam3D.LY, Cam3D.LZ)
         glBindVertexArray(vaoGround)
         glActiveTexture(GL_TEXTURE0)
@@ -626,7 +644,7 @@ void main() {
 precision highp float;
 precision highp sampler2DShadow;
 in vec3 vW; in vec4 vL; in vec2 vUV; in float vSun;
-uniform sampler2D uTex; uniform sampler2DShadow uShadow; uniform sampler2D uFog; uniform sampler2D uWater;
+uniform sampler2D uTex; uniform sampler2DShadow uShadow; uniform sampler2D uFog; uniform sampler2D uWater; uniform sampler2D uDet;
 uniform vec2 uMap; uniform float uTime;
 out vec4 o;
 """ + SHADOW_FN + """
@@ -634,6 +652,10 @@ void main() {
   vec3 c = texture(uTex, vUV).rgb;
   vec2 m = vW.xz / uMap;
   float wt = texture(uWater, m).r;
+  // травинки вблизи: только там, где земля зелёная
+  float grass = smoothstep(0.015, 0.07, c.g - max(c.r, c.b * 1.1)) * (1.0 - smoothstep(0.3, 0.6, wt));
+  float dt = texture(uDet, vW.xz / 80.0).r * 0.6 + texture(uDet, vW.xz / 23.0 + 0.37).r * 0.4;
+  c *= 1.0 + (dt - 0.5) * 0.55 * grass;
   if (wt > 0.6) {
     float k = smoothstep(0.6, 1.0, wt);
     float a = sin(vW.x * 0.11 + uTime * 1.4 + sin(vW.z * 0.05) * 3.0) * sin(vW.z * 0.17 - uTime * 1.1);
