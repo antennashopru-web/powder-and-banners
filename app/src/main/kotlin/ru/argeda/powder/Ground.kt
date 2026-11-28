@@ -194,3 +194,99 @@ object Ground {
     @Suppress("unused")
     private fun len(x: Float, y: Float) = sqrt(x * x + y * y).let { max(0f, min(1f, it)) }
 }
+
+/**
+ * Холмы для 3D: высота по клеткам (центры клеток), у воды и у края карты опускается к нулю.
+ * Тот же шум, что даёт светотень на текстуре земли, поэтому склоны совпадают с нарисованным светом.
+ * На игру не влияет: только картинка.
+ */
+object Relief {
+    const val AMP = 64f
+    @Volatile var w = 1
+    @Volatile var h = 1
+    @Volatile var hb: ByteArray = ByteArray(1)
+
+    fun build(G: Game): ByteArray {
+        val W = G.W
+        val H = G.H
+        // расстояние до воды в клетках (обход в ширину)
+        val dist = IntArray(W * H) { 99 }
+        val q = IntArray(W * H)
+        var qh = 0
+        var qt = 0
+        for (i in 0 until W * H) if (G.terrain[i].toInt() == T_WATER) { dist[i] = 0; q[qt++] = i }
+        while (qh < qt) {
+            val i = q[qh++]
+            val x = i % W
+            val y = i / W
+            for (d in 0 until 4) {
+                val nx = x + intArrayOf(1, -1, 0, 0)[d]
+                val ny = y + intArrayOf(0, 0, 1, -1)[d]
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
+                val j = ny * W + nx
+                if (dist[j] > dist[i] + 1) { dist[j] = dist[i] + 1; q[qt++] = j }
+            }
+        }
+        fun ss(a: Double, b: Double, v: Double): Double { val t = ((v - a) / (b - a)).coerceIn(0.0, 1.0); return t * t * (3 - 2 * t) }
+        val f = FloatArray(W * H)
+        for (y in 0 until H) for (x in 0 until W) {
+            val s = fbm(x / 9.0, y / 9.0, G.seed + 211) * 1.6 + fbm(x / 3.5, y / 3.5, G.seed + 223) * 0.35
+            var v = ((s - 0.62) / 1.2).coerceIn(0.0, 1.0)
+            v = v * v * (3 - 2 * v)
+            v *= ss(0.5, 3.5, dist[y * W + x].toDouble())
+            v *= ss(0.0, 4.0, minOf(minOf(x, y), minOf(W - 1 - x, H - 1 - y)).toDouble())
+            f[y * W + x] = v.toFloat()
+        }
+        // сгладить: пологие склоны без ступенек
+        var sm = f
+        repeat(2) {
+            val o = FloatArray(W * H)
+            for (y in 0 until H) for (x in 0 until W) {
+                var t = 0f
+                var n = 0
+                for (dy in -1..1) for (dx in -1..1) {
+                    val xx = x + dx
+                    val yy = y + dy
+                    if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue
+                    t += sm[yy * W + xx]; n++
+                }
+                o[y * W + x] = t / n
+            }
+            sm = o
+        }
+        // вода и самый край карты — ровно на нуле
+        for (i in 0 until W * H) {
+            val x = i % W
+            val y = i / W
+            if (dist[i] == 0 || x == 0 || y == 0 || x == W - 1 || y == H - 1) sm[i] = 0f
+        }
+        return ByteArray(W * H) { (sm[it] * 255).toInt().coerceIn(0, 255).toByte() }
+    }
+
+    fun set(G: Game, b: ByteArray) { hb = b; w = G.W; h = G.H }
+
+    private fun hv(x: Int, y: Int): Float {
+        val xx = clampI(x, 0, w - 1)
+        val yy = clampI(y, 0, h - 1)
+        return ((hb.getOrNull(yy * w + xx)?.toInt() ?: 0) and 0xff) / 255f
+    }
+
+    /** высота в мировых пикселях, так же как линейная выборка текстуры на видеокарте */
+    fun at(x: Double, z: Double): Float {
+        val b = hb
+        if (b.size < w * h) return 0f
+        val fx = x / TILE - 0.5
+        val fz = z / TILE - 0.5
+        val x0 = floor(fx).toInt()
+        val z0 = floor(fz).toInt()
+        val ax = (fx - x0).toFloat()
+        val az = (fz - z0).toFloat()
+        val a = hv(x0, z0) + (hv(x0 + 1, z0) - hv(x0, z0)) * ax
+        val c = hv(x0, z0 + 1) + (hv(x0 + 1, z0 + 1) - hv(x0, z0 + 1)) * ax
+        return (a + (c - a) * az) * AMP
+    }
+
+    /** ниже всех углов прямоугольника: здание не висит над склоном */
+    fun minOver(x0: Double, z0: Double, x1: Double, z1: Double): Float =
+        minOf(minOf(at(x0, z0), at(x1, z0)), minOf(at(x0, z1), at(x1, z1))).let { minOf(it, at((x0 + x1) / 2, (z0 + z1) / 2)) }
+}

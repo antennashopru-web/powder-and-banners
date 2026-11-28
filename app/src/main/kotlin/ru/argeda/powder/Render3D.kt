@@ -65,7 +65,7 @@ class Cam3D {
 
     /** мировая точка → экран в dp; out[2] = масштаб (dp на мировой пиксель). false — за камерой */
     fun project(x: Double, y: Double, z: Double, out: FloatArray): Boolean {
-        v4[0] = x.toFloat(); v4[1] = y.toFloat(); v4[2] = z.toFloat(); v4[3] = 1f
+        v4[0] = x.toFloat(); v4[1] = y.toFloat() + Relief.at(x, z); v4[2] = z.toFloat(); v4[3] = 1f
         Matrix.multiplyMV(r4, 0, vp, 0, v4, 0)
         val w = r4[3]
         if (w <= 1e-3f) return false
@@ -89,7 +89,15 @@ class Cam3D {
         un(-1f, a); un(1f, b)
         val dy = b[1] - a[1]
         if (dy > -1e-6) return false
-        val t = -a[1] / dy
+        // луч до холмов: несколько шагов к высоте под точкой пересечения
+        var hy = 0.0
+        for (k in 0 until 4) {
+            val t = (hy - a[1]) / dy
+            out[0] = a[0] + (b[0] - a[0]) * t
+            out[1] = a[2] + (b[2] - a[2]) * t
+            hy = Relief.at(out[0], out[1]).toDouble()
+        }
+        val t = (hy - a[1]) / dy
         out[0] = a[0] + (b[0] - a[0]) * t
         out[1] = a[2] + (b[2] - a[2]) * t
         return true
@@ -148,7 +156,7 @@ class Frame3D {
 }
 
 class ChunkUp(val gen: Int, val key: Int, val ver: Int, val bmp: Bitmap)
-class MapUp(val gen: Int, val low: Bitmap, val water: ByteBuffer, val w: Int, val h: Int)
+class MapUp(val gen: Int, val low: Bitmap, val water: ByteBuffer, val w: Int, val h: Int, val hgt: ByteBuffer)
 class FogUp(val gen: Int, val px: ByteBuffer, val w: Int, val h: Int)
 
 /** Отрисовка OpenGL ES 3: земля кусками, пятна на земле, модели экземплярами, тени, туман войны. */
@@ -184,6 +192,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
     private var fogTex = 0
     private var waterTex = 0
     private var lowTex = 0
+    private var hgtTex = 0
     private var dummyFog = true
     private var aniso = 0f
 
@@ -218,8 +227,8 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         chunkTex.clear(); gen = -1
         pModel = prog(VS_MODEL, FS_MODEL, uM, "uVP", "uLVP", "uPos", "uRows", "uShadow", "uFog", "uLight", "uMap")
         pShadow = prog(VS_MODEL_SHADOW, FS_EMPTY, uS, "uLVP", "uPos", "uRows")
-        pGround = prog(VS_GROUND, FS_GROUND, uG, "uVP", "uLVP", "uRect", "uUV", "uTex", "uShadow", "uFog", "uWater", "uMap", "uTime")
-        pDecal = prog(VS_DECAL, FS_DECAL, uD, "uVP", "uFog", "uMap")
+        pGround = prog(VS_GROUND, FS_GROUND, uG, "uVP", "uLVP", "uRect", "uUV", "uTex", "uShadow", "uFog", "uWater", "uMap", "uTime", "uHgt", "uAmp", "uLight")
+        pDecal = prog(VS_DECAL, FS_DECAL, uD, "uVP", "uFog", "uMap", "uHgt", "uAmp")
         val ext = glGetString(GL_EXTENSIONS) ?: ""
         if (ext.contains("GL_EXT_texture_filter_anisotropic")) {
             val f = FloatArray(1); glGetFloatv(0x84FF, f, 0); aniso = minOf(4f, f[0])
@@ -230,12 +239,27 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         val q = floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)
         glBindBuffer(GL_ARRAY_BUFFER, quad)
         glBufferData(GL_ARRAY_BUFFER, q.size * 4, fbuf(q), GL_STATIC_DRAW)
+        // сетка земли: кусок делится на GN×GN клеток, высоту берёт вершинный шейдер
+        val gv = FloatArray((GN + 1) * (GN + 1) * 2)
+        for (j in 0..GN) for (i in 0..GN) { val o = (j * (GN + 1) + i) * 2; gv[o] = i * 2f / GN - 1f; gv[o + 1] = j * 2f / GN - 1f }
+        val gi = ShortArray(GN * GN * 6)
+        var gk = 0
+        for (j in 0 until GN) for (i in 0 until GN) {
+            val a = j * (GN + 1) + i; val b = a + 1; val c = a + GN + 1; val d = c + 1
+            gi[gk++] = a.toShort(); gi[gk++] = c.toShort(); gi[gk++] = b.toShort(); gi[gk++] = b.toShort(); gi[gk++] = c.toShort(); gi[gk++] = d.toShort()
+        }
+        glGenBuffers(2, ids, 0)
+        val gridVbo = ids[0]; val gridIbo = ids[1]
+        glBindBuffer(GL_ARRAY_BUFFER, gridVbo)
+        glBufferData(GL_ARRAY_BUFFER, gv.size * 4, fbuf(gv), GL_STATIC_DRAW)
         // VAO земли
         glGenVertexArrays(2, ids, 0)
         vaoGround = ids[0]; vaoDecal = ids[1]
         glBindVertexArray(vaoGround)
-        glBindBuffer(GL_ARRAY_BUFFER, quad)
+        glBindBuffer(GL_ARRAY_BUFFER, gridVbo)
         glEnableVertexAttribArray(0); glVertexAttribPointer(0, 2, GL_FLOAT, false, 8, 0)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gridIbo)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, gi.size * 2, ByteBuffer.allocateDirect(gi.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().apply { put(gi); flip() }, GL_STATIC_DRAW)
         glBindVertexArray(vaoDecal)
         glBindBuffer(GL_ARRAY_BUFFER, quad)
         glEnableVertexAttribArray(0); glVertexAttribPointer(0, 2, GL_FLOAT, false, 8, 0)
@@ -289,15 +313,15 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glReadBuffer(GL_NONE)
         glBindFramebuffer(GL_FRAMEBUFFER, 0)
         // туман, вода, грубая подложка
-        glGenTextures(3, ids, 0); fogTex = ids[0]; waterTex = ids[1]; lowTex = ids[2]
-        for (t in intArrayOf(fogTex, waterTex, lowTex)) {
+        glGenTextures(4, ids, 0); fogTex = ids[0]; waterTex = ids[1]; lowTex = ids[2]; hgtTex = ids[3]
+        for (t in intArrayOf(fogTex, waterTex, lowTex, hgtTex)) {
             glBindTexture(GL_TEXTURE_2D, t)
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
             val px = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder())
-            px.put(byteArrayOf(30, 24, 16, 0)); px.flip()
+            if (t == hgtTex) px.put(byteArrayOf(0, 0, 0, 0)) else px.put(byteArrayOf(30, 24, 16, 0)); px.flip()
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, px)
         }
         dummyFog = true
@@ -337,6 +361,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, shadowTex)
         glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, fogTex)
         glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, waterTex)
+        glActiveTexture(GL_TEXTURE4); glBindTexture(GL_TEXTURE_2D, hgtTex)
         // земля
         glUseProgram(pGround)
         glUniformMatrix4fv(uG["uVP"]!!, 1, false, f.vp, 0)
@@ -344,6 +369,8 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glUniform1i(uG["uTex"]!!, 0); glUniform1i(uG["uShadow"]!!, 1); glUniform1i(uG["uFog"]!!, 2); glUniform1i(uG["uWater"]!!, 3)
         glUniform2f(uG["uMap"]!!, f.mapW, f.mapH)
         glUniform1f(uG["uTime"]!!, f.time)
+        glUniform1i(uG["uHgt"]!!, 4); glUniform1f(uG["uAmp"]!!, Relief.AMP)
+        glUniform3f(uG["uLight"]!!, Cam3D.LX, Cam3D.LY, Cam3D.LZ)
         glBindVertexArray(vaoGround)
         glActiveTexture(GL_TEXTURE0)
         val span = (CH * TILE).toFloat()
@@ -362,7 +389,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
                 glBindTexture(GL_TEXTURE_2D, lowTex)
                 glUniform4f(uG["uUV"]!!, x0 / f.mapW, z0 / f.mapH, w / f.mapW, h / f.mapH)
             }
-            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)
+            glDrawElements(GL_TRIANGLES, GN * GN * 6, GL_UNSIGNED_SHORT, 0)
         }
         // пятна на земле
         if (f.decN > 0) {
@@ -370,8 +397,9 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
             glUniformMatrix4fv(uD["uVP"]!!, 1, false, f.vp, 0)
             glUniform1i(uD["uFog"]!!, 2)
             glUniform2f(uD["uMap"]!!, f.mapW, f.mapH)
+            glUniform1i(uD["uHgt"]!!, 4); glUniform1f(uD["uAmp"]!!, Relief.AMP)
             glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-            glDepthMask(false)
+            glDepthMask(false); glDisable(GL_DEPTH_TEST)
             if (decBuf.capacity() < f.decN) decBuf = ByteBuffer.allocateDirect(f.dec.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
             decBuf.clear(); decBuf.put(f.dec, 0, f.decN); decBuf.flip()
             glBindBuffer(GL_ARRAY_BUFFER, decVbo)
@@ -381,7 +409,7 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
             glVertexAttribPointer(2, 4, GL_FLOAT, false, 40, 16)
             glVertexAttribPointer(3, 2, GL_FLOAT, false, 40, 32)
             glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, f.decN / 10)
-            glDepthMask(true); glDisable(GL_BLEND)
+            glDepthMask(true); glEnable(GL_DEPTH_TEST); glDisable(GL_BLEND)
         }
         // модели
         glUseProgram(pModel)
@@ -415,9 +443,9 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
         glBindVertexArray(m.vao[f.bTeam[b].coerceIn(0, 1)])
         glBindBuffer(GL_ARRAY_BUFFER, instVbo)
         val off = f.bStart[b] * 4
-        glVertexAttribPointer(1, 4, GL_FLOAT, false, 40, off)
-        glVertexAttribPointer(2, 4, GL_FLOAT, false, 40, off + 16)
-        glVertexAttribPointer(3, 2, GL_FLOAT, false, 40, off + 32)
+        glVertexAttribPointer(1, 4, GL_FLOAT, false, INST * 4, off)
+        glVertexAttribPointer(2, 4, GL_FLOAT, false, INST * 4, off + 16)
+        glVertexAttribPointer(3, 3, GL_FLOAT, false, INST * 4, off + 32)
         glBindTexture(GL_TEXTURE_2D, m.tex)
         glUniform1i(uRows, m.rows)
         glDrawElementsInstanced(GL_TRIANGLES, m.tris * 3, GL_UNSIGNED_SHORT, 0, f.bCount[b])
@@ -433,6 +461,9 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
                 mu.water.position(0)
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mu.w, mu.h, 0, GL_RED, GL_UNSIGNED_BYTE, mu.water)
+                glBindTexture(GL_TEXTURE_2D, hgtTex)
+                mu.hgt.position(0)
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mu.w, mu.h, 0, GL_RED, GL_UNSIGNED_BYTE, mu.hgt)
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 4)
             }
         }
@@ -489,6 +520,10 @@ class Renderer3D(val models: Array<Model3D>) : GLSurfaceView.Renderer {
     }
 
     companion object {
+        /** чисел на один экземпляр модели */
+        const val INST = 11
+        /** клеток сетки на сторону куска земли */
+        const val GN = 32
         private const val MODEL_COMMON = """#version 300 es
 precision highp float;
 precision highp int;
@@ -496,7 +531,7 @@ precision highp isampler2D;
 layout(location=0) in vec3 aCol;
 layout(location=1) in vec4 iA;
 layout(location=2) in vec4 iB;
-layout(location=3) in vec2 iC;
+layout(location=3) in vec3 iC;
 uniform isampler2D uPos;
 uniform int uRows;
 uniform mat4 uLVP;
@@ -508,7 +543,7 @@ vec3 world() {
   vec3 p = mix(P(int(iB.x)), P(int(iB.y)), iB.z);
   p.xz *= iA.w; p.y *= iB.w;
   float c = cos(iA.z), s = sin(iA.z);
-  return vec3(iA.x + p.x * c - p.z * s, p.y, iA.y + p.x * s + p.z * c);
+  return vec3(iA.x + p.x * c - p.z * s, p.y + iC.z, iA.y + p.x * s + p.z * c);
 }
 """
         const val VS_MODEL = MODEL_COMMON + """
@@ -516,7 +551,7 @@ uniform mat4 uVP;
 out vec3 vCol; out vec3 vW; out vec4 vL; flat out vec2 vC;
 void main() {
   vec3 w = world();
-  vW = w; vCol = aCol; vC = iC; vL = uLVP * vec4(w, 1.0);
+  vW = w; vCol = aCol; vC = iC.xy; vL = uLVP * vec4(w, 1.0);
   gl_Position = uVP * vec4(w, 1.0);
 }
 """
@@ -570,11 +605,18 @@ precision highp float;
 layout(location=0) in vec2 aQ;
 uniform mat4 uVP; uniform mat4 uLVP;
 uniform vec4 uRect; uniform vec4 uUV;
-out vec3 vW; out vec4 vL; out vec2 vUV;
+uniform sampler2D uHgt; uniform float uAmp; uniform vec2 uMap; uniform vec3 uLight;
+out vec3 vW; out vec4 vL; out vec2 vUV; out float vSun;
+float H(vec2 p) { return textureLod(uHgt, p / uMap, 0.0).r * uAmp; }
 void main() {
   vec2 q = aQ * 0.5 + 0.5;
   vec2 w = uRect.xy + q * uRect.zw;
-  vW = vec3(w.x, 0.0, w.y);
+  vW = vec3(w.x, H(w), w.y);
+  // свет по склону: светлая сторона к солнцу, тёмная от него (поверх нарисованной светотени — мягко)
+  float e = 24.0;
+  vec3 n = normalize(vec3(H(w - vec2(e, 0.0)) - H(w + vec2(e, 0.0)), 2.0 * e, H(w - vec2(0.0, e)) - H(w + vec2(0.0, e))));
+  float flat0 = uLight.y;
+  vSun = clamp(1.0 + (dot(n, uLight) - flat0) * 1.25, 0.72, 1.22);
   vUV = uUV.xy + q * uUV.zw;
   vL = uLVP * vec4(vW, 1.0);
   gl_Position = uVP * vec4(vW, 1.0);
@@ -583,7 +625,7 @@ void main() {
         const val FS_GROUND = """#version 300 es
 precision highp float;
 precision highp sampler2DShadow;
-in vec3 vW; in vec4 vL; in vec2 vUV;
+in vec3 vW; in vec4 vL; in vec2 vUV; in float vSun;
 uniform sampler2D uTex; uniform sampler2DShadow uShadow; uniform sampler2D uFog; uniform sampler2D uWater;
 uniform vec2 uMap; uniform float uTime;
 out vec4 o;
@@ -599,7 +641,7 @@ void main() {
     c += vec3(0.75, 0.88, 1.0) * (smoothstep(0.82, 1.0, a) * 0.22 + b * 0.025) * k;
   }
   float s = shade(vL);
-  c *= mix(0.58, 1.04, s) * vec3(1.02, 1.0, 0.96);
+  c *= mix(0.58, 1.04, s) * vec3(1.02, 1.0, 0.96) * vSun;
   vec4 f = texture(uFog, m);
   o = vec4(mix(c, f.rgb, f.a), 1.0);
 }
@@ -611,6 +653,7 @@ layout(location=1) in vec4 iA;
 layout(location=2) in vec4 iB;
 layout(location=3) in vec2 iC;
 uniform mat4 uVP;
+uniform sampler2D uHgt; uniform float uAmp; uniform vec2 uMap;
 out vec2 vQ; out vec4 vCol; flat out float vK; out vec2 vW;
 void main() {
   vQ = aQ; vCol = iB; vK = iC.x;
@@ -618,7 +661,8 @@ void main() {
   vec2 q = vec2(aQ.x * iA.z, aQ.y * iA.w);
   vec2 w = iA.xy + vec2(q.x * c - q.y * s, q.x * s + q.y * c);
   vW = w;
-  gl_Position = uVP * vec4(w.x, 0.6, w.y, 1.0);
+  float h = textureLod(uHgt, w / uMap, 0.0).r * uAmp;
+  gl_Position = uVP * vec4(w.x, h + 0.6, w.y, 1.0);
 }
 """
         const val FS_DECAL = """#version 300 es

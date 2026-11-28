@@ -120,7 +120,10 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             water.put(if (open) 255.toByte() else 0)
         }
         water.flip()
-        renderer.mapUp.set(MapUp(gen, low, water, G.W, G.H))
+        val hb = Relief.build(G)
+        Relief.set(G, hb)
+        val hgt = ByteBuffer.allocateDirect(hb.size).apply { put(hb); flip() }
+        renderer.mapUp.set(MapUp(gen, low, water, G.W, G.H, hgt))
     }
 
     // ------------------------------------------------------------ деревья
@@ -203,12 +206,19 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
         ring = d.toFloatArray(); ringKinds = k.toIntArray()
     }
 
+    /** здание на склоне ставим по самому низкому углу: оно врезается в холм и не висит в воздухе */
+    private fun bldY(cx: Double, cz: Double, w: Int, h: Int): Float {
+        val hx = w * TILE * 0.42
+        val hz = h * TILE * 0.42
+        return Relief.minOver(cx - hx, cz - hz, cx + hx, cz + hz) - 1f
+    }
+
     // ------------------------------------------------------------ снимок кадра
     private class Bucket { var a = FloatArray(160); var n = 0
-        fun add(x: Float, z: Float, ang: Float, sxz: Float, fa: Float, fb: Float, mix: Float, sy: Float, tint: Float, alpha: Float) {
-            if (n + 10 > a.size) a = a.copyOf(a.size * 2)
-            a[n] = x; a[n + 1] = z; a[n + 2] = ang; a[n + 3] = sxz; a[n + 4] = fa; a[n + 5] = fb; a[n + 6] = mix; a[n + 7] = sy; a[n + 8] = tint; a[n + 9] = alpha
-            n += 10
+        fun add(x: Float, z: Float, ang: Float, sxz: Float, fa: Float, fb: Float, mix: Float, sy: Float, tint: Float, alpha: Float, y: Float = Relief.at(x.toDouble(), z.toDouble())) {
+            if (n + Renderer3D.INST > a.size) a = a.copyOf(a.size * 2)
+            a[n] = x; a[n + 1] = z; a[n + 2] = ang; a[n + 3] = sxz; a[n + 4] = fa; a[n + 5] = fb; a[n + 6] = mix; a[n + 7] = sy; a[n + 8] = tint; a[n + 9] = alpha; a[n + 10] = y
+            n += Renderer3D.INST
         }
     }
     private val buckets = Array(Models3D.COUNT * 2) { Bucket() }
@@ -360,10 +370,11 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             decal(b.x, b.y + 4, d.w * TILE * 0.62, d.h * TILE * 0.58, 0xff78603a.toInt(), 0.35, 0)
             if (sel.contains(b)) decal(b.x, b.y, d.w * TILE * 0.62, d.h * TILE * 0.62, if (b.team == 0) 0xff7cff6a.toInt() else 0xffff6a5a.toInt(), 0.95, 1)
             val prog = if (b.built) 1f else (b.progress / d.time).toFloat().coerceIn(0f, 1f)
+            val hy = bldY(b.x, b.y, d.w, d.h)
             if (!b.built) {
-                buckets[Models3D.M_SCAFFOLD * 2].add(b.x.toFloat(), b.y.toFloat(), 0f, d.w * TILE / 64f * 0.98f, 0f, 0f, 0f, KY * (0.35f + 0.65f * min(1f, prog * 1.6f)), 0f, 1f)
-                if (prog > 0.05f) buckets[(Models3D.M_BLD + b.type) * 2 + team].add(b.x.toFloat(), b.y.toFloat(), 0f, 0.96f, 0f, 0f, 0f, KY * prog, 0f, 1f)
-            } else buckets[(Models3D.M_BLD + b.type) * 2 + team].add(b.x.toFloat(), b.y.toFloat(), 0f, 1f, 0f, 0f, 0f, KY, 0f, 1f)
+                buckets[Models3D.M_SCAFFOLD * 2].add(b.x.toFloat(), b.y.toFloat(), 0f, d.w * TILE / 64f * 0.98f, 0f, 0f, 0f, KY * (0.35f + 0.65f * min(1f, prog * 1.6f)), 0f, 1f, hy)
+                if (prog > 0.05f) buckets[(Models3D.M_BLD + b.type) * 2 + team].add(b.x.toFloat(), b.y.toFloat(), 0f, 0.96f, 0f, 0f, 0f, KY * prog, 0f, 1f, hy)
+            } else buckets[(Models3D.M_BLD + b.type) * 2 + team].add(b.x.toFloat(), b.y.toFloat(), 0f, 1f, 0f, 0f, 0f, KY, 0f, 1f, hy)
         }
         // отряды
         for (u in G.units) {
@@ -430,7 +441,8 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             decal(x0 + d.w * TILE / 2.0, y0 + d.h * TILE / 2.0, d.w * TILE / 2.0, d.h * TILE / 2.0, if (p.ok) 0xff50ff50.toInt() else 0xffff3c28.toInt(), 0.6, 2)
             ghostModel = Models3D.M_BLD + p.type
             val gAng = if (p.type == B_GATE && G.gateVerticalAt(p.tx, p.ty, 0)) (PI / 2).toFloat() else 0f
-            ghost.add((x0 + d.w * TILE / 2.0).toFloat(), (y0 + d.h * TILE / 2.0).toFloat(), gAng, 1f, 0f, 0f, 0f, KY, if (p.ok) 1f else 2f, 0.6f)
+            ghost.add((x0 + d.w * TILE / 2.0).toFloat(), (y0 + d.h * TILE / 2.0).toFloat(), gAng, 1f, 0f, 0f, 0f, KY, if (p.ok) 1f else 2f, 0.6f,
+                bldY(x0 + d.w * TILE / 2.0, y0 + d.h * TILE / 2.0, d.w, d.h))
         }
         // упаковка
         var total = 0
@@ -441,13 +453,13 @@ class View3D(ctx: Context, val gv: GameView, models: Array<Model3D>) : FrameLayo
             val b = buckets[i]
             if (b.n == 0) continue
             b.a.copyInto(f.inst, f.instN, 0, b.n)
-            f.addBatch(i / 2, i % 2, f.instN, b.n / 10)
+            f.addBatch(i / 2, i % 2, f.instN, b.n / Renderer3D.INST)
             f.instN += b.n
         }
         f.nbOpaque = f.nb
         if (ghost.n > 0) {
             ghost.a.copyInto(f.inst, f.instN, 0, ghost.n)
-            f.addBatch(ghostModel, 0, f.instN, ghost.n / 10)
+            f.addBatch(ghostModel, 0, f.instN, ghost.n / Renderer3D.INST)
             f.instN += ghost.n
         }
         f.ensureDec(decN)
